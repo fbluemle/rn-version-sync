@@ -1,0 +1,7 @@
+{
+  "name": "rn-version-sync",
+  "version": "0.0.1",
+  "main": "index.js",
+  "author": "Frieder Bluemle <frieder.bluemle@gmail.com>",
+  "license": "MIT"
+}
