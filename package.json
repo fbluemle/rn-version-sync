@@ -4,6 +4,9 @@
   "description": "Fast and simple utility to sync React Native version with native code",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
   "bin": {
     "rn-version-sync": "./dist/cli.js"
   },
