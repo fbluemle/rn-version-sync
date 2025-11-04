@@ -44,7 +44,7 @@ Add to your `package.json`:
 ```json
 {
   "scripts": {
-    "version": "rn-version-sync && git add -A"
+    "version": "rn-version-sync && git add -u"
   }
 }
 ```
