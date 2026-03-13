@@ -1,41 +1,67 @@
 import {updateAndroidVersion} from './android';
 import {updateIOSVersion} from './ios';
-import {getPackageVersion, calculateVersionCode} from './utils';
+import {getPackageVersion, calculateVersionCode, MAX_VERSION_CODE} from './utils';
 
 export interface SyncOptions {
   verbose?: boolean;
+  versionName?: string;
   versionCode?: number;
+  reserveBuilds?: number;
+  gradlePath?: string;
+  pbxprojPath?: string;
+  skipAndroid?: boolean;
+  skipIos?: boolean;
 }
 
-const MAX_VERSION_CODE = 2147483647;
+export interface ResolvedVersions {
+  versionName: string;
+  versionCode: number;
+}
+
+/**
+ * Resolve version name and code from options without writing any files
+ */
+export function resolveVersions(projectRoot: string, options: SyncOptions = {}): ResolvedVersions {
+  const manualVersionCode = options.versionCode;
+  const versionName = options.versionName ?? getPackageVersion(projectRoot);
+  let versionCode = manualVersionCode ?? calculateVersionCode(versionName);
+
+  if (options.reserveBuilds !== undefined && manualVersionCode === undefined) {
+    if (!Number.isInteger(options.reserveBuilds) || options.reserveBuilds < 1) {
+      throw new Error('reserve-builds must be a positive integer');
+    }
+    versionCode *= options.reserveBuilds;
+  }
+
+  if (versionCode > MAX_VERSION_CODE) {
+    throw new Error(
+      `Version code ${versionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
+      `Android and iOS use 32-bit signed integers for version codes.`
+    );
+  }
+
+  return {versionName, versionCode};
+}
 
 /**
  * Main function to sync versions
  */
 export function syncVersions(projectRoot: string, options: SyncOptions = {}): void {
-  const {verbose = false, versionCode: manualVersionCode} = options;
-
-  const versionName = getPackageVersion(projectRoot);
-  const versionCode = manualVersionCode ?? calculateVersionCode(versionName);
-
-  // Validate manual version code override
-  if (manualVersionCode !== undefined && manualVersionCode > MAX_VERSION_CODE) {
-    throw new Error(
-      `Version code ${manualVersionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
-      `Android and iOS use 32-bit signed integers for version codes.`
-    );
-  }
+  const {verbose = false} = options;
+  const {versionName, versionCode} = resolveVersions(projectRoot, options);
 
   if (verbose) {
     console.log(`Syncing version name: ${versionName}`);
     console.log(`Using version code: ${versionCode}`);
   }
 
-  // Update Android with separate version name and code
-  updateAndroidVersion(projectRoot, versionName, versionCode, verbose);
+  if (!options.skipAndroid) {
+    updateAndroidVersion(projectRoot, versionName, versionCode, verbose, options.gradlePath);
+  }
 
-  // Update iOS with separate version name and code
-  updateIOSVersion(projectRoot, versionName, versionCode.toString(), verbose);
+  if (!options.skipIos) {
+    updateIOSVersion(projectRoot, versionName, versionCode.toString(), verbose, options.pbxprojPath);
+  }
 }
 
 // Re-export utilities for testing

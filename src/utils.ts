@@ -71,7 +71,7 @@ export function parseSemver(version: string): SemverComponents {
 /**
  * Maximum safe version code for 32-bit signed integers (Android/iOS constraint)
  */
-const MAX_VERSION_CODE = 2147483647;
+export const MAX_VERSION_CODE = 2147483647;
 
 /**
  * Calculate version code from semver using formula: 10000*major + 100*minor + patch

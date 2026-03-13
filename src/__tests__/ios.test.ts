@@ -75,4 +75,21 @@ describe('updateIOSVersion', () => {
     const after = fs.statSync(project.pbxprojPath()).mtimeMs;
     expect(after).toBe(before);
   });
+
+  it('uses explicit pbxprojPath when provided', () => {
+    project = new TestProject({android: false});
+
+    updateIOSVersion(project.root, '5.0.0', '50000', false, project.pbxprojPath());
+
+    const content = project.readPbxproj();
+    expect(content).toContain('MARKETING_VERSION = 5.0.0;');
+  });
+
+  it('throws when explicit pbxprojPath does not exist', () => {
+    project = new TestProject({android: false, ios: false});
+
+    expect(() =>
+      updateIOSVersion(project.root, '1.0.0', '10000', false, '/nonexistent/project.pbxproj')
+    ).toThrow('project.pbxproj not found at specified path');
+  });
 });
