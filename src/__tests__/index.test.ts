@@ -169,4 +169,40 @@ describe('resolveVersions', () => {
     const pbxproj = project.readPbxproj();
     expect(pbxproj).toContain('MARKETING_VERSION = 1.0.0;');
   });
+
+  it('applies reserveBuilds to calculated version code', () => {
+    project = new TestProject({version: '1.2.3', android: false, ios: false});
+
+    const result = resolveVersions(project.root, {reserveBuilds: 100});
+    expect(result).toEqual({versionName: '1.2.3', versionCode: 1020300});
+  });
+
+  it('ignores reserveBuilds when versionCode is manually set', () => {
+    project = new TestProject({version: '1.0.0', android: false, ios: false});
+
+    const result = resolveVersions(project.root, {versionCode: 42, reserveBuilds: 100});
+    expect(result).toEqual({versionName: '1.0.0', versionCode: 42});
+  });
+
+  it('throws when reserved version code exceeds max', () => {
+    project = new TestProject({version: '200.0.0', android: false, ios: false});
+
+    expect(() => resolveVersions(project.root, {reserveBuilds: 10000})).toThrow(
+      'exceeds maximum value'
+    );
+  });
+
+  it('throws when reserveBuilds is not a positive integer', () => {
+    project = new TestProject({version: '1.0.0', android: false, ios: false});
+
+    expect(() => resolveVersions(project.root, {reserveBuilds: 0})).toThrow(
+      'reserve-builds must be a positive integer'
+    );
+    expect(() => resolveVersions(project.root, {reserveBuilds: -1})).toThrow(
+      'reserve-builds must be a positive integer'
+    );
+    expect(() => resolveVersions(project.root, {reserveBuilds: 1.5})).toThrow(
+      'reserve-builds must be a positive integer'
+    );
+  });
 });

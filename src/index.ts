@@ -6,6 +6,7 @@ export interface SyncOptions {
   verbose?: boolean;
   versionName?: string;
   versionCode?: number;
+  reserveBuilds?: number;
   gradlePath?: string;
   pbxprojPath?: string;
   skipAndroid?: boolean;
@@ -22,16 +23,22 @@ export interface ResolvedVersions {
  */
 export function resolveVersions(projectRoot: string, options: SyncOptions = {}): ResolvedVersions {
   const manualVersionCode = options.versionCode;
+  const versionName = options.versionName ?? getPackageVersion(projectRoot);
+  let versionCode = manualVersionCode ?? calculateVersionCode(versionName);
 
-  if (manualVersionCode !== undefined && manualVersionCode > MAX_VERSION_CODE) {
+  if (options.reserveBuilds !== undefined && manualVersionCode === undefined) {
+    if (!Number.isInteger(options.reserveBuilds) || options.reserveBuilds < 1) {
+      throw new Error('reserve-builds must be a positive integer');
+    }
+    versionCode *= options.reserveBuilds;
+  }
+
+  if (versionCode > MAX_VERSION_CODE) {
     throw new Error(
-      `Version code ${manualVersionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
+      `Version code ${versionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
       `Android and iOS use 32-bit signed integers for version codes.`
     );
   }
-
-  const versionName = options.versionName ?? getPackageVersion(projectRoot);
-  const versionCode = manualVersionCode ?? calculateVersionCode(versionName);
 
   return {versionName, versionCode};
 }

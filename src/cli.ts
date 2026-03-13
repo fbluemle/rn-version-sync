@@ -22,6 +22,7 @@ program
   .option('--project-dir <dir>', 'Project root directory (default: current directory)')
   .option('--gradle-path <path>', 'Path to Android build.gradle')
   .option('--pbxproj-path <path>', 'Path to iOS project.pbxproj')
+  .option('--reserve-builds <n>', 'Reserve N build slots per version (e.g. 100 turns 10203 into 1020300)')
   .option('--skip-android', 'Skip Android version update')
   .option('--skip-ios', 'Skip iOS version update')
   .option('--dry-run', 'Print resolved version name and code without writing files')
@@ -39,10 +40,19 @@ program
         throw new Error('version-code must be a valid number');
       }
 
+      const reserveBuilds = options.reserveBuilds
+        ? parseInt(options.reserveBuilds, 10)
+        : undefined;
+
+      if (reserveBuilds !== undefined && (isNaN(reserveBuilds) || reserveBuilds < 1)) {
+        throw new Error('reserve-builds must be a positive integer');
+      }
+
       const syncOptions = {
         verbose: options.verbose,
         versionName: options.versionName,
         versionCode,
+        reserveBuilds,
         gradlePath: options.gradlePath ? path.resolve(options.gradlePath) : undefined,
         pbxprojPath: options.pbxprojPath ? path.resolve(options.pbxprojPath) : undefined,
         skipAndroid: options.skipAndroid,
