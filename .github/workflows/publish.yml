@@ -12,6 +12,7 @@ on:
           - minor
           - patch
 permissions:
+  id-token: write
   contents: write
 jobs:
   publish:
@@ -28,15 +29,13 @@ jobs:
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 24
           registry-url: 'https://registry.npmjs.org'
       - run: yarn --frozen-lockfile
       - run: yarn build
       - run: yarn test
       - run: npm version ${{ github.event.inputs.type }}
-      - run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm publish
       - run: echo "VERSION=$(npm pkg get version | xargs)" >> $GITHUB_ENV
       - run: git push origin HEAD --follow-tags
       - run: gh release create v${{ env.VERSION }} --generate-notes -t ${{ env.VERSION }}
