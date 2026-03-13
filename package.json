@@ -11,7 +11,7 @@
     "rn-version-sync": "dist/cli.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
   },
   "repository": {
