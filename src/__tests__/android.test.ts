@@ -49,4 +49,21 @@ describe('updateAndroidVersion', () => {
     const content = project.readGradle();
     expect(content).toContain("versionName '2.0.0'");
   });
+
+  it('uses explicit gradlePath when provided', () => {
+    project = new TestProject({ios: false});
+
+    updateAndroidVersion(project.root, '5.0.0', 50000, false, project.gradlePath());
+
+    const content = project.readGradle();
+    expect(content).toContain('versionName "5.0.0"');
+  });
+
+  it('throws when explicit gradlePath does not exist', () => {
+    project = new TestProject({android: false, ios: false});
+
+    expect(() =>
+      updateAndroidVersion(project.root, '1.0.0', 10000, false, '/nonexistent/build.gradle')
+    ).toThrow('build.gradle not found at specified path');
+  });
 });

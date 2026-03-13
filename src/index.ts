@@ -1,24 +1,28 @@
 import {updateAndroidVersion} from './android';
 import {updateIOSVersion} from './ios';
-import {getPackageVersion, calculateVersionCode} from './utils';
+import {getPackageVersion, calculateVersionCode, MAX_VERSION_CODE} from './utils';
 
 export interface SyncOptions {
   verbose?: boolean;
+  versionName?: string;
   versionCode?: number;
+  gradlePath?: string;
+  pbxprojPath?: string;
+  skipAndroid?: boolean;
+  skipIos?: boolean;
 }
 
-const MAX_VERSION_CODE = 2147483647;
+export interface ResolvedVersions {
+  versionName: string;
+  versionCode: number;
+}
 
 /**
- * Main function to sync versions
+ * Resolve version name and code from options without writing any files
  */
-export function syncVersions(projectRoot: string, options: SyncOptions = {}): void {
-  const {verbose = false, versionCode: manualVersionCode} = options;
+export function resolveVersions(projectRoot: string, options: SyncOptions = {}): ResolvedVersions {
+  const manualVersionCode = options.versionCode;
 
-  const versionName = getPackageVersion(projectRoot);
-  const versionCode = manualVersionCode ?? calculateVersionCode(versionName);
-
-  // Validate manual version code override
   if (manualVersionCode !== undefined && manualVersionCode > MAX_VERSION_CODE) {
     throw new Error(
       `Version code ${manualVersionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
@@ -26,16 +30,31 @@ export function syncVersions(projectRoot: string, options: SyncOptions = {}): vo
     );
   }
 
+  const versionName = options.versionName ?? getPackageVersion(projectRoot);
+  const versionCode = manualVersionCode ?? calculateVersionCode(versionName);
+
+  return {versionName, versionCode};
+}
+
+/**
+ * Main function to sync versions
+ */
+export function syncVersions(projectRoot: string, options: SyncOptions = {}): void {
+  const {verbose = false} = options;
+  const {versionName, versionCode} = resolveVersions(projectRoot, options);
+
   if (verbose) {
     console.log(`Syncing version name: ${versionName}`);
     console.log(`Using version code: ${versionCode}`);
   }
 
-  // Update Android with separate version name and code
-  updateAndroidVersion(projectRoot, versionName, versionCode, verbose);
+  if (!options.skipAndroid) {
+    updateAndroidVersion(projectRoot, versionName, versionCode, verbose, options.gradlePath);
+  }
 
-  // Update iOS with separate version name and code
-  updateIOSVersion(projectRoot, versionName, versionCode.toString(), verbose);
+  if (!options.skipIos) {
+    updateIOSVersion(projectRoot, versionName, versionCode.toString(), verbose, options.pbxprojPath);
+  }
 }
 
 // Re-export utilities for testing

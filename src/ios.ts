@@ -31,9 +31,14 @@ export function updateIOSVersion(
   projectRoot: string,
   versionName: string,
   versionCode: string,
-  verbose: boolean
+  verbose: boolean,
+  explicitPbxprojPath?: string
 ): void {
-  const pbxprojPath = findPbxproj(projectRoot);
+  if (explicitPbxprojPath && !fs.existsSync(explicitPbxprojPath)) {
+    throw new Error(`project.pbxproj not found at specified path: ${explicitPbxprojPath}`);
+  }
+
+  const pbxprojPath = explicitPbxprojPath ?? findPbxproj(projectRoot);
 
   if (!pbxprojPath) {
     if (verbose) console.log('Skipping iOS: project.pbxproj not found');

@@ -22,9 +22,14 @@ export function updateAndroidVersion(
   projectRoot: string,
   versionName: string,
   versionCode: number,
-  verbose: boolean
+  verbose: boolean,
+  explicitGradlePath?: string
 ): void {
-  const buildGradlePath = findBuildGradle(projectRoot);
+  if (explicitGradlePath && !fs.existsSync(explicitGradlePath)) {
+    throw new Error(`build.gradle not found at specified path: ${explicitGradlePath}`);
+  }
+
+  const buildGradlePath = explicitGradlePath ?? findBuildGradle(projectRoot);
 
   if (!buildGradlePath) {
     if (verbose) console.log('Skipping Android: build.gradle not found');
