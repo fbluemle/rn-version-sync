@@ -76,6 +76,43 @@ npx rn-version-sync --version-code 42
 By default, version code is calculated from semver. Use this option if you need
 a specific version code that doesn't follow the formula.
 
+**Read the current version from native files** - Print the version name
+or version code as written in the native build files. Useful for CI
+scripts that need to reference what was actually built (e.g. tagging a
+release in Sentry, GitHub, etc.):
+
+```bash
+npx rn-version-sync --print-version-name android
+# 1.2.3
+
+npx rn-version-sync --print-version-code android
+# 10203
+
+npx rn-version-sync --print-version-name ios
+# 1.2.3
+
+npx rn-version-sync --print-version-code ios
+# 10203
+```
+
+Each flag prints a single value (and nothing else) to stdout, read
+directly from the native file:
+
+- `android` → `versionName` / `versionCode` from `android/app/build.gradle`
+- `ios` → `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` from `project.pbxproj`
+
+The first match in the file wins, so projects with flavors or
+per-configuration overrides may need to read the value some other way.
+
+Compose your own identifier in the shell — for example, a Sentry
+release id (`<appId>@<versionName>+<versionCode>`):
+
+```bash
+NAME=$(npx rn-version-sync --print-version-name android)
+CODE=$(npx rn-version-sync --print-version-code android)
+sentry-cli releases new "com.example.app@$NAME+$CODE"
+```
+
 ## Requirements
 
 - Node.js >= 14
