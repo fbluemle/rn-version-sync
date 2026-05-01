@@ -1,6 +1,6 @@
 import {describe, it, expect, afterEach} from 'vitest';
 import * as fs from 'fs';
-import {updateIOSVersion} from '../ios';
+import {updateIOSVersion, getIOSVersions} from '../ios';
 import {TestProject} from './helpers';
 
 describe('updateIOSVersion', () => {
@@ -91,5 +91,41 @@ describe('updateIOSVersion', () => {
     expect(() =>
       updateIOSVersion(project.root, '1.0.0', '10000', false, '/nonexistent/project.pbxproj')
     ).toThrow('project.pbxproj not found at specified path');
+  });
+});
+
+describe('getIOSVersions', () => {
+  let project: TestProject;
+
+  afterEach(() => {
+    project?.cleanup();
+  });
+
+  it('reads MARKETING_VERSION and CURRENT_PROJECT_VERSION from pbxproj', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{name: 'Release', version: '1.2.3', buildNumber: '1020300'}],
+    });
+
+    expect(getIOSVersions(project.root)).toEqual({
+      versionName: '1.2.3',
+      versionCode: '1020300',
+    });
+  });
+
+  it('preserves the version code as written (does not recompute)', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{name: 'Release', version: '1.2.3', buildNumber: '42'}],
+    });
+
+    expect(getIOSVersions(project.root).versionCode).toBe('42');
+  });
+
+  it('throws when project.pbxproj is missing', () => {
+    project = new TestProject({android: false, ios: false});
+    expect(() => getIOSVersions(project.root)).toThrow(
+      'Could not find iOS project.pbxproj'
+    );
   });
 });

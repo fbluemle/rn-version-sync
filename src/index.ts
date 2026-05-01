@@ -1,6 +1,8 @@
-import {updateAndroidVersion} from './android';
-import {updateIOSVersion} from './ios';
+import {updateAndroidVersion, getAndroidVersions} from './android';
+import {updateIOSVersion, getIOSVersions} from './ios';
 import {getPackageVersion, calculateVersionCode, MAX_VERSION_CODE} from './utils';
+
+export type Platform = 'android' | 'ios';
 
 export interface SyncOptions {
   verbose?: boolean;
@@ -65,6 +67,6 @@ export function syncVersions(projectRoot: string, options: SyncOptions = {}): vo
 }
 
 // Re-export utilities for testing
-export {updateAndroidVersion} from './android';
-export {updateIOSVersion} from './ios';
+export {updateAndroidVersion, getAndroidVersions} from './android';
+export {updateIOSVersion, getIOSVersions} from './ios';
 export {getPackageVersion} from './utils';

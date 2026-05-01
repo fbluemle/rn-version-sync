@@ -24,6 +24,49 @@ function findPbxproj(projectRoot: string): string | null {
   return null;
 }
 
+function readPbxproj(projectRoot: string, explicitPbxprojPath?: string): {
+  pbxprojPath: string;
+  content: string;
+} {
+  if (explicitPbxprojPath && !fs.existsSync(explicitPbxprojPath)) {
+    throw new Error(`project.pbxproj not found at specified path: ${explicitPbxprojPath}`);
+  }
+
+  const pbxprojPath = explicitPbxprojPath ?? findPbxproj(projectRoot);
+
+  if (!pbxprojPath) {
+    throw new Error('Could not find iOS project.pbxproj');
+  }
+
+  return {pbxprojPath, content: fs.readFileSync(pbxprojPath, 'utf8')};
+}
+
+/**
+ * Read MARKETING_VERSION (version name) and CURRENT_PROJECT_VERSION (version code)
+ * from project.pbxproj as written. Returns the first match for each.
+ */
+export function getIOSVersions(
+  projectRoot: string,
+  explicitPbxprojPath?: string
+): {versionName: string; versionCode: string} {
+  const {pbxprojPath, content} = readPbxproj(projectRoot, explicitPbxprojPath);
+
+  const nameMatch = content.match(/MARKETING_VERSION\s*=\s*([^;]+);/);
+  const codeMatch = content.match(/CURRENT_PROJECT_VERSION\s*=\s*([^;]+);/);
+
+  if (!nameMatch) {
+    throw new Error(`No MARKETING_VERSION found in ${pbxprojPath}`);
+  }
+  if (!codeMatch) {
+    throw new Error(`No CURRENT_PROJECT_VERSION found in ${pbxprojPath}`);
+  }
+
+  return {
+    versionName: nameMatch[1].trim().replace(/^"(.*)"$/, '$1'),
+    versionCode: codeMatch[1].trim().replace(/^"(.*)"$/, '$1'),
+  };
+}
+
 /**
  * Update iOS project.pbxproj with new version name and version code
  */

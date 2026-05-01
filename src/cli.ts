@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import {program} from 'commander';
-import {syncVersions, resolveVersions} from '.';
+import {syncVersions, resolveVersions, getAndroidVersions, getIOSVersions, Platform} from '.';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -26,6 +26,14 @@ program
   .option('--skip-android', 'Skip Android version update')
   .option('--skip-ios', 'Skip iOS version update')
   .option('--dry-run', 'Print resolved version name and code without writing files')
+  .option(
+    '--print-version-name <platform>',
+    'Print version name (Android versionName / iOS MARKETING_VERSION) read from the native file for "android" or "ios"'
+  )
+  .option(
+    '--print-version-code <platform>',
+    'Print version code (Android versionCode / iOS CURRENT_PROJECT_VERSION) read from the native file for "android" or "ios"'
+  )
   .action((options) => {
     try {
       const projectDir = options.projectDir
@@ -58,6 +66,19 @@ program
         skipAndroid: options.skipAndroid,
         skipIos: options.skipIos,
       };
+
+      if (options.printVersionName || options.printVersionCode) {
+        const platform = (options.printVersionName ?? options.printVersionCode) as string;
+        if (platform !== 'android' && platform !== 'ios') {
+          throw new Error('--print-version-name / --print-version-code must be "android" or "ios"');
+        }
+        const versions = platform === 'android'
+          ? getAndroidVersions(projectDir, syncOptions.gradlePath)
+          : getIOSVersions(projectDir, syncOptions.pbxprojPath);
+        const value = options.printVersionName ? versions.versionName : versions.versionCode;
+        process.stdout.write(`${value}\n`);
+        return;
+      }
 
       if (options.dryRun) {
         const resolved = resolveVersions(projectDir, syncOptions);
