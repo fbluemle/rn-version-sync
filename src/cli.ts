@@ -5,6 +5,7 @@ import * as path from 'node:path';
 import { program } from 'commander';
 import {
   formatEnv,
+  formatTemplate,
   getAndroidAppId,
   getAndroidVersions,
   getIOSAppId,
@@ -24,7 +25,12 @@ const printFlags: Record<string, string> = {
   printVersionCode: '--print-version-code',
   printAppId: '--print-app-id',
   printEnv: '--print-env',
+  print: '--print',
 };
+
+// Output of --print without --format, in the style of --dry-run
+const DEFAULT_TEMPLATE =
+  'appId: {appId}\nversionName: {versionName}\nversionCode: {versionCode}';
 
 program
   .name('rn-version-sync')
@@ -72,8 +78,16 @@ program
     'Print APP_ID, VERSION_NAME and VERSION_CODE as dotenv lines read from the native file for "android" or "ios"',
   )
   .option(
+    '--print <platform>',
+    'Print app id, version name and version code read from the native file for "android" or "ios", one per line or as the --format template',
+  )
+  .option(
+    '--format <template>',
+    'Template for --print with {appId}, {versionName} and {versionCode} placeholders, e.g. "{appId}@{versionName}+{versionCode}"',
+  )
+  .option(
     '--configuration <name>',
-    'Xcode build configuration for the app id with --print-app-id ios or --print-env ios (default: Release)',
+    'Xcode build configuration for the iOS app id with --print-app-id, --print-env or --print (default: Release)',
   )
   .action((options) => {
     try {
@@ -115,13 +129,14 @@ program
         skipIos: options.skipIos,
       };
 
-      if (
-        options.configuration !== undefined &&
-        options.printAppId !== 'ios' &&
-        options.printEnv !== 'ios'
-      ) {
+      if (options.format !== undefined && options.print === undefined) {
+        throw new Error('--format can only be used with --print');
+      }
+
+      const withAppId = [options.printAppId, options.printEnv, options.print];
+      if (options.configuration !== undefined && !withAppId.includes('ios')) {
         throw new Error(
-          '--configuration can only be used with --print-app-id ios or --print-env ios',
+          '--configuration can only be used with --print-app-id, --print-env or --print for ios',
         );
       }
 
@@ -142,12 +157,25 @@ program
           throw new Error(`${printFlags[key]} must be "android" or "ios"`);
         }
 
+        const readOptions = {
+          gradlePath: syncOptions.gradlePath,
+          pbxprojPath: syncOptions.pbxprojPath,
+          configuration: options.configuration,
+        };
+
+        if (key === 'print') {
+          const output = formatTemplate(
+            options.format ?? DEFAULT_TEMPLATE,
+            projectDir,
+            platform,
+            readOptions,
+          );
+          process.stdout.write(`${output}\n`);
+          return;
+        }
+
         if (key === 'printEnv') {
-          const values = readNativeValues(projectDir, platform, {
-            gradlePath: syncOptions.gradlePath,
-            pbxprojPath: syncOptions.pbxprojPath,
-            configuration: options.configuration,
-          });
+          const values = readNativeValues(projectDir, platform, readOptions);
           process.stdout.write(formatEnv(values));
           return;
         }

@@ -148,12 +148,45 @@ npx rn-version-sync --print-env ios
   which keeps the output safe to `eval` or append to `GITHUB_ENV` without
   quoting.
 
-Compose your own identifier in the shell - for example, a Sentry release
-id (`<appId>@<versionName>+<versionCode>`):
+**Print all values, or a custom format** - Without `--format`, `--print`
+lists the app id, version name and version code of one platform in the
+style of `--dry-run`. With `--format`, it fills a template instead:
+
+```bash
+npx rn-version-sync --print ios
+# appId: com.example.app
+# versionName: 1.2.3
+# versionCode: 10203
+
+npx rn-version-sync --print ios --format '{appId}@{versionName}+{versionCode}'
+# com.example.app@1.2.3+10203
+```
+
+- Placeholders are `{appId}`, `{versionName}` and `{versionCode}`; an
+  unknown placeholder is an error. Everything else in the template is
+  printed as is.
+- Only the referenced values are read, so a template without `{appId}`
+  works in projects where the app id cannot be resolved.
+- Values are inserted as written in the native file, without the
+  character check that `--print-env` applies. `--configuration` selects
+  the iOS build configuration for `{appId}`.
+
+For example, a Sentry release id (`<appId>@<versionName>+<versionCode>`)
+is one call:
+
+```bash
+RELEASE=$(npx rn-version-sync --print ios --format '{appId}@{versionName}+{versionCode}')
+sentry-cli releases new "$RELEASE"
+```
+
+When a script needs several of the values, `--print-env` provides them
+in one call instead:
 
 ```bash
 vars=$(npx rn-version-sync --print-env ios) && eval "$vars"
 sentry-cli releases new "$APP_ID@$VERSION_NAME+$VERSION_CODE"
+sentry-cli releases files "$APP_ID@$VERSION_NAME+$VERSION_CODE" \
+  upload-sourcemaps --dist "$VERSION_CODE" build/
 ```
 
 Assign the output to a variable before `eval` as shown: a plain

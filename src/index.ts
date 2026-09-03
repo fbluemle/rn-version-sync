@@ -105,6 +105,26 @@ export interface NativeValues {
   versionCode: string;
 }
 
+function readAppId(
+  projectRoot: string,
+  platform: Platform,
+  options: ReadOptions,
+): string {
+  return platform === 'android'
+    ? getAndroidAppId(projectRoot, options.gradlePath)
+    : getIOSAppId(projectRoot, options.pbxprojPath, options.configuration);
+}
+
+function readVersions(
+  projectRoot: string,
+  platform: Platform,
+  options: ReadOptions,
+): Omit<NativeValues, 'appId'> {
+  return platform === 'android'
+    ? getAndroidVersions(projectRoot, options.gradlePath)
+    : getIOSVersions(projectRoot, options.pbxprojPath);
+}
+
 /**
  * Read app id, version name and version code of one platform as written in
  * its native build file.
@@ -114,17 +134,48 @@ export function readNativeValues(
   platform: Platform,
   options: ReadOptions = {},
 ): NativeValues {
-  if (platform === 'android') {
-    return {
-      appId: getAndroidAppId(projectRoot, options.gradlePath),
-      ...getAndroidVersions(projectRoot, options.gradlePath),
-    };
-  }
-  const { pbxprojPath, configuration } = options;
   return {
-    appId: getIOSAppId(projectRoot, pbxprojPath, configuration),
-    ...getIOSVersions(projectRoot, pbxprojPath),
+    appId: readAppId(projectRoot, platform, options),
+    ...readVersions(projectRoot, platform, options),
   };
+}
+
+const PLACEHOLDERS = ['appId', 'versionName', 'versionCode'] as const;
+type Placeholder = (typeof PLACEHOLDERS)[number];
+
+function isPlaceholder(name: string): name is Placeholder {
+  return (PLACEHOLDERS as readonly string[]).includes(name);
+}
+
+/**
+ * Fill the {appId}, {versionName} and {versionCode} placeholders of a
+ * template with the values of one platform. Only referenced values are
+ * read, so a template without {appId} works where the app id cannot be
+ * resolved. Values are inserted as written in the native file.
+ */
+export function formatTemplate(
+  template: string,
+  projectRoot: string,
+  platform: Platform,
+  options: ReadOptions = {},
+): string {
+  let appId: string | undefined;
+  let versions: Omit<NativeValues, 'appId'> | undefined;
+
+  return template.replace(/\{(\w+)\}/g, (match, name: string) => {
+    if (!isPlaceholder(name)) {
+      const available = PLACEHOLDERS.map((p) => `{${p}}`).join(', ');
+      throw new Error(
+        `Unknown placeholder ${match} in template (available: ${available})`,
+      );
+    }
+    if (name === 'appId') {
+      appId ??= readAppId(projectRoot, platform, options);
+      return appId;
+    }
+    versions ??= readVersions(projectRoot, platform, options);
+    return versions[name];
+  });
 }
 
 const ENV_VALUE = /^[A-Za-z0-9._+-]+$/;
