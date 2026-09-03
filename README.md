@@ -104,13 +104,40 @@ directly from the native file:
 The first match in the file wins, so projects with flavors or
 per-configuration overrides may need to read the value some other way.
 
+**Read the app identifier** - Print the application id as written in the
+native project:
+
+```bash
+npx rn-version-sync --print-app-id android
+# com.example.app
+
+npx rn-version-sync --print-app-id ios
+# com.example.app
+
+npx rn-version-sync --print-app-id ios --configuration Staging
+# com.example.app.staging
+```
+
+- `android` → the `applicationId` literal in `android/app/build.gradle`.
+  Build type `applicationIdSuffix` values are not applied. If flavors
+  declare their own `applicationId`, the command fails instead of guessing.
+- `ios` → `PRODUCT_BUNDLE_IDENTIFIER` of the application target's build
+  configuration named by `--configuration` (default `Release`). The
+  configuration is located through the target's configuration list, not by
+  position in the file, so test and extension targets do not interfere.
+  The command fails if the project has several application targets, if the
+  configuration does not exist, or if the value is a build setting variable
+  such as `$(PRODUCT_NAME:rfc1034identifier)`. Only settings in
+  `project.pbxproj` are read; xcconfig files are not resolved.
+
 Compose your own identifier in the shell — for example, a Sentry
 release id (`<appId>@<versionName>+<versionCode>`):
 
 ```bash
+APP_ID=$(npx rn-version-sync --print-app-id android)
 NAME=$(npx rn-version-sync --print-version-name android)
 CODE=$(npx rn-version-sync --print-version-code android)
-sentry-cli releases new "com.example.app@$NAME+$CODE"
+sentry-cli releases new "$APP_ID@$NAME+$CODE"
 ```
 
 ## Requirements

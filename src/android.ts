@@ -57,6 +57,31 @@ export function getAndroidVersions(
 }
 
 /**
+ * Read the applicationId literal from build.gradle. Fails when several
+ * distinct literals are present (for example a flavor override), since the
+ * effective id then depends on the build variant.
+ */
+export function getAndroidAppId(projectRoot: string, explicitGradlePath?: string): string {
+  const {buildGradlePath, content} = readBuildGradle(projectRoot, explicitGradlePath);
+
+  const ids = [...content.matchAll(/\bapplicationId\s+["']([^"']+)["']/g)].map(([, id]) => id);
+  const distinct = [...new Set(ids)];
+
+  if (distinct.length === 0) {
+    throw new Error(`No applicationId found in ${buildGradlePath}`);
+  }
+  if (distinct.length > 1) {
+    const values = distinct.map((id) => `"${id}"`).join(', ');
+    throw new Error(
+      `Multiple applicationId values found in ${buildGradlePath}: ${values}.\n` +
+      `The effective id depends on the build variant, which cannot be resolved from the file.`
+    );
+  }
+
+  return distinct[0];
+}
+
+/**
  * Update Android build.gradle with new version name and version code
  */
 export function updateAndroidVersion(
