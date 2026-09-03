@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   formatEnv,
+  formatTemplate,
   readNativeValues,
   resolveVersions,
   syncVersions,
@@ -332,6 +333,72 @@ describe('formatEnv', () => {
     );
     expect(() => formatEnv({ ...values, versionCode: '' })).toThrow(
       'VERSION_CODE value ""',
+    );
+  });
+});
+
+describe('formatTemplate', () => {
+  let project: TestProject;
+
+  afterEach(() => {
+    project?.cleanup();
+  });
+
+  it('fills the placeholders with the values of the platform', () => {
+    project = new TestProject({
+      android: {
+        applicationId: 'com.testapp',
+        versionName: '1.2.3',
+        versionCode: 10203,
+      },
+      ios: [
+        {
+          name: 'Debug',
+          bundleId: 'com.testapp.debug',
+          version: '4.5.6',
+          buildNumber: '40506',
+        },
+        {
+          name: 'Release',
+          bundleId: 'com.testapp',
+          version: '4.5.6',
+          buildNumber: '40506',
+        },
+      ],
+    });
+
+    const template = '{appId}@{versionName}+{versionCode}';
+    expect(formatTemplate(template, project.root, 'android')).toBe(
+      'com.testapp@1.2.3+10203',
+    );
+    expect(formatTemplate(template, project.root, 'ios')).toBe(
+      'com.testapp@4.5.6+40506',
+    );
+
+    const debug = formatTemplate('{appId}', project.root, 'ios', {
+      configuration: 'Debug',
+    });
+    expect(debug).toBe('com.testapp.debug');
+  });
+
+  it('reads only the referenced values', () => {
+    project = new TestProject({ android: false });
+
+    const template = '{versionName}+{versionCode}';
+    expect(formatTemplate(template, project.root, 'ios')).toBe('1.0.0+1');
+    expect(() => formatTemplate('{appId}', project.root, 'ios')).toThrow(
+      'No PRODUCT_BUNDLE_IDENTIFIER',
+    );
+  });
+
+  it('rejects unknown placeholders and keeps other braces', () => {
+    project = new TestProject({ android: false, ios: false });
+
+    expect(() => formatTemplate('{foo}', project.root, 'ios')).toThrow(
+      'Unknown placeholder {foo} in template (available: {appId}, {versionName}, {versionCode})',
+    );
+    expect(formatTemplate('{} { } literal', project.root, 'ios')).toBe(
+      '{} { } literal',
     );
   });
 });
