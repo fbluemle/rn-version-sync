@@ -1,5 +1,9 @@
-import { updateAndroidVersion } from './android';
-import { updateIOSVersion } from './ios';
+import {
+  getAndroidAppId,
+  getAndroidVersions,
+  updateAndroidVersion,
+} from './android';
+import { getIOSAppId, getIOSVersions, updateIOSVersion } from './ios';
 import {
   MAX_VERSION_CODE,
   calculateVersionCode,
@@ -86,6 +90,67 @@ export function syncVersions(
       options.pbxprojPath,
     );
   }
+}
+
+export interface ReadOptions {
+  gradlePath?: string;
+  pbxprojPath?: string;
+  /** Xcode build configuration for the iOS app id (default: Release) */
+  configuration?: string;
+}
+
+export interface NativeValues {
+  appId: string;
+  versionName: string;
+  versionCode: string;
+}
+
+/**
+ * Read app id, version name and version code of one platform as written in
+ * its native build file.
+ */
+export function readNativeValues(
+  projectRoot: string,
+  platform: Platform,
+  options: ReadOptions = {},
+): NativeValues {
+  if (platform === 'android') {
+    return {
+      appId: getAndroidAppId(projectRoot, options.gradlePath),
+      ...getAndroidVersions(projectRoot, options.gradlePath),
+    };
+  }
+  const { pbxprojPath, configuration } = options;
+  return {
+    appId: getIOSAppId(projectRoot, pbxprojPath, configuration),
+    ...getIOSVersions(projectRoot, pbxprojPath),
+  };
+}
+
+const ENV_VALUE = /^[A-Za-z0-9._+-]+$/;
+
+/**
+ * Render native values as dotenv lines APP_ID, VERSION_NAME and
+ * VERSION_CODE. Values are limited to [A-Za-z0-9._+-] so the output can be
+ * eval'd in a shell or appended to GITHUB_ENV without quoting.
+ */
+export function formatEnv(values: NativeValues): string {
+  const entries: [string, string][] = [
+    ['APP_ID', values.appId],
+    ['VERSION_NAME', values.versionName],
+    ['VERSION_CODE', values.versionCode],
+  ];
+
+  let output = '';
+  for (const [key, value] of entries) {
+    if (!ENV_VALUE.test(value)) {
+      throw new Error(
+        `${key} value "${value}" contains characters outside [A-Za-z0-9._+-] and cannot be printed as an environment variable`,
+      );
+    }
+    output += `${key}=${value}\n`;
+  }
+  return output;
 }
 
 // Re-export utilities for testing
