@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { resolveVersions, syncVersions } from '../index';
+import {
+  formatEnv,
+  readNativeValues,
+  resolveVersions,
+  syncVersions,
+} from '../index';
 import { TestProject } from './helpers';
 
 describe('syncVersions', () => {
@@ -216,6 +221,117 @@ describe('resolveVersions', () => {
     );
     expect(() => resolveVersions(project.root, { reserveBuilds: 1.5 })).toThrow(
       'reserve-builds must be a positive integer',
+    );
+  });
+});
+
+describe('readNativeValues', () => {
+  let project: TestProject;
+
+  afterEach(() => {
+    project?.cleanup();
+  });
+
+  it('reads app id and versions for android', () => {
+    project = new TestProject({
+      android: {
+        applicationId: 'com.testapp',
+        versionName: '1.2.3',
+        versionCode: 10203,
+      },
+      ios: false,
+    });
+
+    expect(readNativeValues(project.root, 'android')).toEqual({
+      appId: 'com.testapp',
+      versionName: '1.2.3',
+      versionCode: '10203',
+    });
+  });
+
+  it('reads app id and versions for ios from the requested configuration', () => {
+    project = new TestProject({
+      android: false,
+      ios: [
+        {
+          name: 'Debug',
+          bundleId: 'com.testapp.debug',
+          version: '1.2.3',
+          buildNumber: '10203',
+        },
+        {
+          name: 'Release',
+          bundleId: 'com.testapp',
+          version: '1.2.3',
+          buildNumber: '10203',
+        },
+      ],
+    });
+
+    expect(readNativeValues(project.root, 'ios')).toEqual({
+      appId: 'com.testapp',
+      versionName: '1.2.3',
+      versionCode: '10203',
+    });
+
+    const debug = readNativeValues(project.root, 'ios', {
+      configuration: 'Debug',
+    });
+    expect(debug.appId).toBe('com.testapp.debug');
+  });
+
+  it('throws when any value cannot be resolved', () => {
+    project = new TestProject({ android: false });
+
+    expect(() => readNativeValues(project.root, 'ios')).toThrow(
+      'No PRODUCT_BUNDLE_IDENTIFIER',
+    );
+  });
+
+  it('uses explicit file paths', () => {
+    project = new TestProject({
+      ios: [{ name: 'Release', bundleId: 'com.testapp' }],
+    });
+
+    const android = readNativeValues(project.root, 'android', {
+      gradlePath: project.gradlePath(),
+    });
+    const ios = readNativeValues(project.root, 'ios', {
+      pbxprojPath: project.pbxprojPath(),
+    });
+    expect(android.appId).toBe('com.testapp');
+    expect(ios.appId).toBe('com.testapp');
+  });
+});
+
+describe('formatEnv', () => {
+  it('renders APP_ID, VERSION_NAME and VERSION_CODE in that order', () => {
+    const env = formatEnv({
+      appId: 'com.test-app',
+      versionName: '1.2.3-beta.1+build.5',
+      versionCode: '10203',
+    });
+
+    expect(env).toBe(
+      'APP_ID=com.test-app\nVERSION_NAME=1.2.3-beta.1+build.5\nVERSION_CODE=10203\n',
+    );
+  });
+
+  it('rejects values outside the shell-safe character set', () => {
+    const values = {
+      appId: 'com.testapp',
+      versionName: '1.2.3',
+      versionCode: '1',
+    };
+
+    expect(() => formatEnv({ ...values, versionName: '1.2.3 beta' })).toThrow(
+      'VERSION_NAME value "1.2.3 beta" contains characters outside',
+    );
+    expect(() => formatEnv({ ...values, appId: '$(id)' })).toThrow(
+      'APP_ID value "$(id)"',
+    );
+    expect(() => formatEnv({ ...values, versionCode: '' })).toThrow(
+      'VERSION_CODE value ""',
     );
   });
 });

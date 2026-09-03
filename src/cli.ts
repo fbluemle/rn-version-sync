@@ -4,10 +4,12 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { program } from 'commander';
 import {
+  formatEnv,
   getAndroidAppId,
   getAndroidVersions,
   getIOSAppId,
   getIOSVersions,
+  readNativeValues,
   resolveVersions,
   syncVersions,
 } from '.';
@@ -16,11 +18,12 @@ const packageJson = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
 );
 
-// Read-only flags that print a single value to stdout; keyed by commander's option name
+// Read-only flags that print to stdout; keyed by commander's option name
 const printFlags: Record<string, string> = {
   printVersionName: '--print-version-name',
   printVersionCode: '--print-version-code',
   printAppId: '--print-app-id',
+  printEnv: '--print-env',
 };
 
 program
@@ -65,8 +68,12 @@ program
     'Print app identifier (Android applicationId / iOS PRODUCT_BUNDLE_IDENTIFIER) read from the native file for "android" or "ios"',
   )
   .option(
+    '--print-env <platform>',
+    'Print APP_ID, VERSION_NAME and VERSION_CODE as dotenv lines read from the native file for "android" or "ios"',
+  )
+  .option(
     '--configuration <name>',
-    'Xcode build configuration to read with --print-app-id ios (default: Release)',
+    'Xcode build configuration for the app id with --print-app-id ios or --print-env ios (default: Release)',
   )
   .action((options) => {
     try {
@@ -108,9 +115,13 @@ program
         skipIos: options.skipIos,
       };
 
-      if (options.configuration !== undefined && options.printAppId !== 'ios') {
+      if (
+        options.configuration !== undefined &&
+        options.printAppId !== 'ios' &&
+        options.printEnv !== 'ios'
+      ) {
         throw new Error(
-          '--configuration can only be used with --print-app-id ios',
+          '--configuration can only be used with --print-app-id ios or --print-env ios',
         );
       }
 
@@ -129,6 +140,16 @@ program
         const platform: string = options[key];
         if (platform !== 'android' && platform !== 'ios') {
           throw new Error(`${printFlags[key]} must be "android" or "ios"`);
+        }
+
+        if (key === 'printEnv') {
+          const values = readNativeValues(projectDir, platform, {
+            gradlePath: syncOptions.gradlePath,
+            pbxprojPath: syncOptions.pbxprojPath,
+            configuration: options.configuration,
+          });
+          process.stdout.write(formatEnv(values));
+          return;
         }
 
         let value: string;

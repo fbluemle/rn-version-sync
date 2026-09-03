@@ -130,14 +130,40 @@ npx rn-version-sync --print-app-id ios --configuration Staging
   such as `$(PRODUCT_NAME:rfc1034identifier)`. Only settings in
   `project.pbxproj` are read; xcconfig files are not resolved.
 
-Compose your own identifier in the shell — for example, a Sentry
-release id (`<appId>@<versionName>+<versionCode>`):
+**Print everything as environment variables** - Print the app id, version
+name and version code of one platform as dotenv lines:
 
 ```bash
-APP_ID=$(npx rn-version-sync --print-app-id android)
-NAME=$(npx rn-version-sync --print-version-name android)
-CODE=$(npx rn-version-sync --print-version-code android)
-sentry-cli releases new "$APP_ID@$NAME+$CODE"
+npx rn-version-sync --print-env ios
+# APP_ID=com.example.app
+# VERSION_NAME=1.2.3
+# VERSION_CODE=10203
+```
+
+- The values are read exactly like the individual `--print-*` flags above,
+  including `--configuration` for the iOS app id.
+- Nothing is printed unless all three values resolve, so a failure cannot
+  leave a partial set of variables behind.
+- Values are limited to `A-Z a-z 0-9 . _ + -`. Anything else is an error,
+  which keeps the output safe to `eval` or append to `GITHUB_ENV` without
+  quoting.
+
+Compose your own identifier in the shell - for example, a Sentry release
+id (`<appId>@<versionName>+<versionCode>`):
+
+```bash
+vars=$(npx rn-version-sync --print-env ios) && eval "$vars"
+sentry-cli releases new "$APP_ID@$VERSION_NAME+$VERSION_CODE"
+```
+
+Assign the output to a variable before `eval` as shown: a plain
+`eval "$(...)"` would hide the exit status of a failing command. In GitHub
+Actions the output can also go straight into the environment of the
+following steps:
+
+```yaml
+- run: npx rn-version-sync --print-env ios >> "$GITHUB_ENV"
+- run: sentry-cli releases new "$APP_ID@$VERSION_NAME+$VERSION_CODE"
 ```
 
 ## Requirements
