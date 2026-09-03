@@ -84,8 +84,8 @@ describe('getPackageVersion', () => {
 
   it('throws when package.json is missing', () => {
     project = new TestProject({ android: false, ios: false });
-    const { rmSync } = require('fs');
-    const { join } = require('path');
+    const { rmSync } = require('node:fs');
+    const { join } = require('node:path');
     rmSync(join(project.root, 'package.json'));
     expect(() => getPackageVersion(project.root)).toThrow(
       'package.json not found',
@@ -94,8 +94,8 @@ describe('getPackageVersion', () => {
 
   it('throws when version field is missing', () => {
     project = new TestProject({ android: false, ios: false });
-    const { writeFileSync } = require('fs');
-    const { join } = require('path');
+    const { writeFileSync } = require('node:fs');
+    const { join } = require('node:path');
     writeFileSync(
       join(project.root, 'package.json'),
       JSON.stringify({ name: 'test' }),

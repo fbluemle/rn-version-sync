@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { program } from 'commander';
-import * as fs from 'fs';
-import * as path from 'path';
 import {
   getAndroidAppId,
   getAndroidVersions,
@@ -78,7 +78,7 @@ program
         ? parseInt(options.versionCode, 10)
         : undefined;
 
-      if (versionCode !== undefined && isNaN(versionCode)) {
+      if (versionCode !== undefined && Number.isNaN(versionCode)) {
         throw new Error('version-code must be a valid number');
       }
 
@@ -88,7 +88,7 @@ program
 
       if (
         reserveBuilds !== undefined &&
-        (isNaN(reserveBuilds) || reserveBuilds < 1)
+        (Number.isNaN(reserveBuilds) || reserveBuilds < 1)
       ) {
         throw new Error('reserve-builds must be a positive integer');
       }

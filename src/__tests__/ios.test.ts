@@ -1,4 +1,4 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { afterEach, describe, expect, it } from 'vitest';
 import { getIOSAppId, getIOSVersions, updateIOSVersion } from '../ios';
 import { TestProject, UNIT_TEST_PRODUCT_TYPE } from './helpers';
@@ -32,11 +32,11 @@ describe('updateIOSVersion', () => {
 
     const marketingMatches = content.match(/MARKETING_VERSION = ([^;]+);/g);
     expect(marketingMatches).toHaveLength(2);
-    expect(marketingMatches!.every((m) => m.includes('2.3.4'))).toBe(true);
+    expect(marketingMatches?.every((m) => m.includes('2.3.4'))).toBe(true);
 
     const buildMatches = content.match(/CURRENT_PROJECT_VERSION = ([^;]+);/g);
     expect(buildMatches).toHaveLength(2);
-    expect(buildMatches!.every((m) => m.includes('20304'))).toBe(true);
+    expect(buildMatches?.every((m) => m.includes('20304'))).toBe(true);
   });
 
   it('updates all three configs (Debug + Release + Staging)', () => {
@@ -51,11 +51,11 @@ describe('updateIOSVersion', () => {
 
     const marketingMatches = content.match(/MARKETING_VERSION = ([^;]+);/g);
     expect(marketingMatches).toHaveLength(3);
-    expect(marketingMatches!.every((m) => m.includes('3.0.0'))).toBe(true);
+    expect(marketingMatches?.every((m) => m.includes('3.0.0'))).toBe(true);
 
     const buildMatches = content.match(/CURRENT_PROJECT_VERSION = ([^;]+);/g);
     expect(buildMatches).toHaveLength(3);
-    expect(buildMatches!.every((m) => m.includes('30000'))).toBe(true);
+    expect(buildMatches?.every((m) => m.includes('30000'))).toBe(true);
   });
 
   it('skips silently when ios directory is missing', () => {

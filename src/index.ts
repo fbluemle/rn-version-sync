@@ -1,5 +1,5 @@
-import { getAndroidVersions, updateAndroidVersion } from './android';
-import { getIOSVersions, updateIOSVersion } from './ios';
+import { updateAndroidVersion } from './android';
+import { updateIOSVersion } from './ios';
 import {
   MAX_VERSION_CODE,
   calculateVersionCode,

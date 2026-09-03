@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export interface SemverComponents {
   major: number;
@@ -19,7 +19,7 @@ export function getPackageVersion(projectRoot: string): string {
     );
   }
 
-  let packageJson: any;
+  let packageJson: { version?: string };
   try {
     packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
   } catch (error) {
@@ -58,7 +58,7 @@ export function parseSemver(version: string): SemverComponents {
   const minor = parseInt(parts[1], 10);
   const patch = parseInt(parts[2], 10);
 
-  if (isNaN(major) || isNaN(minor) || isNaN(patch)) {
+  if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
     throw new Error(
       `Invalid semver format: "${version}"\n` +
         `Version components must be numbers (got: ${parts[0]}.${parts[1]}.${parts[2]})`,
