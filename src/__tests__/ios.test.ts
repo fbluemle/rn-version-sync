@@ -1,7 +1,7 @@
-import {describe, it, expect, afterEach} from 'vitest';
 import * as fs from 'fs';
-import {updateIOSVersion, getIOSVersions, getIOSAppId} from '../ios';
-import {TestProject, UNIT_TEST_PRODUCT_TYPE} from './helpers';
+import { afterEach, describe, expect, it } from 'vitest';
+import { getIOSAppId, getIOSVersions, updateIOSVersion } from '../ios';
+import { TestProject, UNIT_TEST_PRODUCT_TYPE } from './helpers';
 
 describe('updateIOSVersion', () => {
   let project: TestProject;
@@ -13,7 +13,7 @@ describe('updateIOSVersion', () => {
   it('updates MARKETING_VERSION and CURRENT_PROJECT_VERSION in a single config', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Release'}],
+      ios: [{ name: 'Release' }],
     });
 
     updateIOSVersion(project.root, '2.3.4', '20304', false);
@@ -24,7 +24,7 @@ describe('updateIOSVersion', () => {
   });
 
   it('updates ALL build configurations (Debug + Release)', () => {
-    project = new TestProject({android: false});
+    project = new TestProject({ android: false });
 
     updateIOSVersion(project.root, '2.3.4', '20304', false);
 
@@ -42,7 +42,7 @@ describe('updateIOSVersion', () => {
   it('updates all three configs (Debug + Release + Staging)', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Debug'}, {name: 'Release'}, {name: 'Staging'}],
+      ios: [{ name: 'Debug' }, { name: 'Release' }, { name: 'Staging' }],
     });
 
     updateIOSVersion(project.root, '3.0.0', '30000', false);
@@ -59,7 +59,7 @@ describe('updateIOSVersion', () => {
   });
 
   it('skips silently when ios directory is missing', () => {
-    project = new TestProject({android: false, ios: false});
+    project = new TestProject({ android: false, ios: false });
     // Should not throw
     updateIOSVersion(project.root, '1.0.0', '10000', false);
   });
@@ -67,7 +67,7 @@ describe('updateIOSVersion', () => {
   it('does not write file when nothing changed', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Release', version: '2.3.4', buildNumber: '20304'}],
+      ios: [{ name: 'Release', version: '2.3.4', buildNumber: '20304' }],
     });
 
     const before = fs.statSync(project.pbxprojPath()).mtimeMs;
@@ -77,19 +77,31 @@ describe('updateIOSVersion', () => {
   });
 
   it('uses explicit pbxprojPath when provided', () => {
-    project = new TestProject({android: false});
+    project = new TestProject({ android: false });
 
-    updateIOSVersion(project.root, '5.0.0', '50000', false, project.pbxprojPath());
+    updateIOSVersion(
+      project.root,
+      '5.0.0',
+      '50000',
+      false,
+      project.pbxprojPath(),
+    );
 
     const content = project.readPbxproj();
     expect(content).toContain('MARKETING_VERSION = 5.0.0;');
   });
 
   it('throws when explicit pbxprojPath does not exist', () => {
-    project = new TestProject({android: false, ios: false});
+    project = new TestProject({ android: false, ios: false });
 
     expect(() =>
-      updateIOSVersion(project.root, '1.0.0', '10000', false, '/nonexistent/project.pbxproj')
+      updateIOSVersion(
+        project.root,
+        '1.0.0',
+        '10000',
+        false,
+        '/nonexistent/project.pbxproj',
+      ),
     ).toThrow('project.pbxproj not found at specified path');
   });
 });
@@ -104,7 +116,7 @@ describe('getIOSVersions', () => {
   it('reads MARKETING_VERSION and CURRENT_PROJECT_VERSION from pbxproj', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Release', version: '1.2.3', buildNumber: '1020300'}],
+      ios: [{ name: 'Release', version: '1.2.3', buildNumber: '1020300' }],
     });
 
     expect(getIOSVersions(project.root)).toEqual({
@@ -116,16 +128,16 @@ describe('getIOSVersions', () => {
   it('preserves the version code as written (does not recompute)', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Release', version: '1.2.3', buildNumber: '42'}],
+      ios: [{ name: 'Release', version: '1.2.3', buildNumber: '42' }],
     });
 
     expect(getIOSVersions(project.root).versionCode).toBe('42');
   });
 
   it('throws when project.pbxproj is missing', () => {
-    project = new TestProject({android: false, ios: false});
+    project = new TestProject({ android: false, ios: false });
     expect(() => getIOSVersions(project.root)).toThrow(
-      'Could not find iOS project.pbxproj'
+      'Could not find iOS project.pbxproj',
     );
   });
 });
@@ -141,8 +153,8 @@ describe('getIOSAppId', () => {
     project = new TestProject({
       android: false,
       ios: [
-        {name: 'Debug', bundleId: 'com.testapp.debug'},
-        {name: 'Release', bundleId: 'com.testapp'},
+        { name: 'Debug', bundleId: 'com.testapp.debug' },
+        { name: 'Release', bundleId: 'com.testapp' },
       ],
     });
 
@@ -153,20 +165,24 @@ describe('getIOSAppId', () => {
     project = new TestProject({
       android: false,
       ios: [
-        {name: 'Debug', bundleId: 'com.testapp.debug'},
-        {name: 'Release', bundleId: 'com.testapp'},
-        {name: 'Staging', bundleId: 'com.testapp.staging'},
+        { name: 'Debug', bundleId: 'com.testapp.debug' },
+        { name: 'Release', bundleId: 'com.testapp' },
+        { name: 'Staging', bundleId: 'com.testapp.staging' },
       ],
     });
 
-    expect(getIOSAppId(project.root, undefined, 'Debug')).toBe('com.testapp.debug');
-    expect(getIOSAppId(project.root, undefined, 'Staging')).toBe('com.testapp.staging');
+    expect(getIOSAppId(project.root, undefined, 'Debug')).toBe(
+      'com.testapp.debug',
+    );
+    expect(getIOSAppId(project.root, undefined, 'Staging')).toBe(
+      'com.testapp.staging',
+    );
   });
 
   it('strips quotes from the identifier', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Release', bundleId: '"com.test-app"'}],
+      ios: [{ name: 'Release', bundleId: '"com.test-app"' }],
     });
 
     expect(getIOSAppId(project.root)).toBe('com.test-app');
@@ -180,15 +196,15 @@ describe('getIOSAppId', () => {
           name: 'TestAppTests',
           productType: UNIT_TEST_PRODUCT_TYPE,
           configs: [
-            {name: 'Debug', bundleId: 'com.testapp.tests'},
-            {name: 'Release', bundleId: 'com.testapp.tests'},
+            { name: 'Debug', bundleId: 'com.testapp.tests' },
+            { name: 'Release', bundleId: 'com.testapp.tests' },
           ],
         },
         {
           name: 'TestApp',
           configs: [
-            {name: 'Debug', bundleId: 'com.testapp.debug'},
-            {name: 'Release', bundleId: 'com.testapp'},
+            { name: 'Debug', bundleId: 'com.testapp.debug' },
+            { name: 'Release', bundleId: 'com.testapp' },
           ],
         },
       ],
@@ -203,36 +219,39 @@ describe('getIOSAppId', () => {
       ios: [
         {
           name: 'Release',
-          bundleId: '"org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)"',
+          bundleId:
+            '"org.reactjs.native.example.$(PRODUCT_NAME:rfc1034identifier)"',
         },
       ],
     });
 
-    expect(() => getIOSAppId(project.root)).toThrow('references a build setting variable');
+    expect(() => getIOSAppId(project.root)).toThrow(
+      'references a build setting variable',
+    );
   });
 
   it('throws when the configuration does not exist', () => {
     project = new TestProject({
       android: false,
       ios: [
-        {name: 'Debug', bundleId: 'com.testapp'},
-        {name: 'Release', bundleId: 'com.testapp'},
+        { name: 'Debug', bundleId: 'com.testapp' },
+        { name: 'Release', bundleId: 'com.testapp' },
       ],
     });
 
     expect(() => getIOSAppId(project.root, undefined, 'Staging')).toThrow(
-      'Build configuration "Staging" not found for target "TestApp"'
+      'Build configuration "Staging" not found for target "TestApp"',
     );
     expect(() => getIOSAppId(project.root, undefined, 'Staging')).toThrow(
-      '(available: "Debug", "Release")'
+      '(available: "Debug", "Release")',
     );
   });
 
   it('throws when the configuration has no PRODUCT_BUNDLE_IDENTIFIER', () => {
-    project = new TestProject({android: false});
+    project = new TestProject({ android: false });
 
     expect(() => getIOSAppId(project.root)).toThrow(
-      'No PRODUCT_BUNDLE_IDENTIFIER in build configuration "Release" of target "TestApp"'
+      'No PRODUCT_BUNDLE_IDENTIFIER in build configuration "Release" of target "TestApp"',
     );
   });
 
@@ -240,12 +259,20 @@ describe('getIOSAppId', () => {
     project = new TestProject({
       android: false,
       iosTargets: [
-        {name: 'TestApp', configs: [{name: 'Release', bundleId: 'com.testapp'}]},
-        {name: 'OtherApp', configs: [{name: 'Release', bundleId: 'com.otherapp'}]},
+        {
+          name: 'TestApp',
+          configs: [{ name: 'Release', bundleId: 'com.testapp' }],
+        },
+        {
+          name: 'OtherApp',
+          configs: [{ name: 'Release', bundleId: 'com.otherapp' }],
+        },
       ],
     });
 
-    expect(() => getIOSAppId(project.root)).toThrow('Multiple application targets found');
+    expect(() => getIOSAppId(project.root)).toThrow(
+      'Multiple application targets found',
+    );
     expect(() => getIOSAppId(project.root)).toThrow('"TestApp", "OtherApp"');
   });
 
@@ -256,25 +283,31 @@ describe('getIOSAppId', () => {
         {
           name: 'TestAppTests',
           productType: UNIT_TEST_PRODUCT_TYPE,
-          configs: [{name: 'Release', bundleId: 'com.testapp.tests'}],
+          configs: [{ name: 'Release', bundleId: 'com.testapp.tests' }],
         },
       ],
     });
 
-    expect(() => getIOSAppId(project.root)).toThrow('No application target found');
+    expect(() => getIOSAppId(project.root)).toThrow(
+      'No application target found',
+    );
   });
 
   it('uses explicit pbxprojPath when provided', () => {
     project = new TestProject({
       android: false,
-      ios: [{name: 'Release', bundleId: 'com.testapp'}],
+      ios: [{ name: 'Release', bundleId: 'com.testapp' }],
     });
 
-    expect(getIOSAppId(project.root, project.pbxprojPath())).toBe('com.testapp');
+    expect(getIOSAppId(project.root, project.pbxprojPath())).toBe(
+      'com.testapp',
+    );
   });
 
   it('throws when project.pbxproj is missing', () => {
-    project = new TestProject({android: false, ios: false});
-    expect(() => getIOSAppId(project.root)).toThrow('Could not find iOS project.pbxproj');
+    project = new TestProject({ android: false, ios: false });
+    expect(() => getIOSAppId(project.root)).toThrow(
+      'Could not find iOS project.pbxproj',
+    );
   });
 });

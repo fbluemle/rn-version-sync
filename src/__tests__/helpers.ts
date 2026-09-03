@@ -1,6 +1,6 @@
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 
 export interface GradleConfig {
   versionName?: string;
@@ -40,10 +40,10 @@ export const UNIT_TEST_PRODUCT_TYPE = 'com.apple.product-type.bundle.unit-test';
 
 const defaults = {
   version: '1.0.0',
-  android: {versionName: '1.0.0', versionCode: 1, quote: '"' as const},
+  android: { versionName: '1.0.0', versionCode: 1, quote: '"' as const },
   ios: [
-    {name: 'Debug', version: '1.0.0', buildNumber: '1'},
-    {name: 'Release', version: '1.0.0', buildNumber: '1'},
+    { name: 'Debug', version: '1.0.0', buildNumber: '1' },
+    { name: 'Release', version: '1.0.0', buildNumber: '1' },
   ],
 };
 
@@ -55,31 +55,32 @@ export class TestProject {
 
     fs.writeFileSync(
       path.join(this.root, 'package.json'),
-      JSON.stringify({name: 'test-app', version: options.version ?? defaults.version}, null, 2)
+      JSON.stringify(
+        { name: 'test-app', version: options.version ?? defaults.version },
+        null,
+        2,
+      ),
     );
 
     if (options.android !== false) {
-      const cfg = {...defaults.android, ...options.android};
+      const cfg = { ...defaults.android, ...options.android };
       const androidDir = path.join(this.root, 'android', 'app');
-      fs.mkdirSync(androidDir, {recursive: true});
-      fs.writeFileSync(
-        path.join(androidDir, 'build.gradle'),
-        buildGradle(cfg)
-      );
+      fs.mkdirSync(androidDir, { recursive: true });
+      fs.writeFileSync(path.join(androidDir, 'build.gradle'), buildGradle(cfg));
     }
 
     const targets =
       options.iosTargets ??
       (options.ios === false
         ? undefined
-        : [{name: 'TestApp', configs: options.ios ?? defaults.ios}]);
+        : [{ name: 'TestApp', configs: options.ios ?? defaults.ios }]);
 
     if (targets !== undefined) {
       const xcodeprojDir = path.join(this.root, 'ios', 'TestApp.xcodeproj');
-      fs.mkdirSync(xcodeprojDir, {recursive: true});
+      fs.mkdirSync(xcodeprojDir, { recursive: true });
       fs.writeFileSync(
         path.join(xcodeprojDir, 'project.pbxproj'),
-        buildPbxproj(targets)
+        buildPbxproj(targets),
       );
     }
   }
@@ -90,7 +91,7 @@ export class TestProject {
 
   pbxprojPath(): string {
     const iosDir = path.join(this.root, 'ios');
-    const entries = fs.readdirSync(iosDir, {withFileTypes: true});
+    const entries = fs.readdirSync(iosDir, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory() && entry.name.endsWith('.xcodeproj')) {
         return path.join(iosDir, entry.name, 'project.pbxproj');
@@ -108,7 +109,7 @@ export class TestProject {
   }
 
   cleanup(): void {
-    fs.rmSync(this.root, {recursive: true, force: true});
+    fs.rmSync(this.root, { recursive: true, force: true });
   }
 }
 
@@ -158,7 +159,7 @@ export function buildPbxproj(targets: PbxprojTarget[]): string {
   for (const target of targets) {
     const targetId = nextId();
     const listId = nextId();
-    const configs = target.configs.map((config) => ({config, id: nextId()}));
+    const configs = target.configs.map((config) => ({ config, id: nextId() }));
     const listComment = `/* Build configuration list for PBXNativeTarget "${target.name}" */`;
 
     targetSections.push(`\t\t${targetId} /* ${target.name} */ = {
@@ -171,7 +172,7 @@ export function buildPbxproj(targets: PbxprojTarget[]): string {
 \t\t\tproductType = "${target.productType ?? APPLICATION_PRODUCT_TYPE}";
 \t\t};`);
 
-    for (const {config, id} of configs) {
+    for (const { config, id } of configs) {
       const settings = [
         `\t\t\t\tCURRENT_PROJECT_VERSION = ${config.buildNumber ?? '1'};`,
         `\t\t\t\tMARKETING_VERSION = ${config.version ?? '1.0.0'};`,
@@ -192,7 +193,7 @@ ${settings.join('\n')}
     listSections.push(`\t\t${listId} ${listComment} = {
 \t\t\tisa = XCConfigurationList;
 \t\t\tbuildConfigurations = (
-${configs.map(({config, id}) => `\t\t\t\t${id} /* ${config.name} */,`).join('\n')}
+${configs.map(({ config, id }) => `\t\t\t\t${id} /* ${config.name} */,`).join('\n')}
 \t\t\t);
 \t\t\tdefaultConfigurationIsVisible = 0;
 \t\t\tdefaultConfigurationName = Release;

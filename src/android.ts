@@ -15,12 +15,17 @@ function findBuildGradle(projectRoot: string): string | null {
   return null;
 }
 
-function readBuildGradle(projectRoot: string, explicitGradlePath?: string): {
+function readBuildGradle(
+  projectRoot: string,
+  explicitGradlePath?: string,
+): {
   buildGradlePath: string;
   content: string;
 } {
   if (explicitGradlePath && !fs.existsSync(explicitGradlePath)) {
-    throw new Error(`build.gradle not found at specified path: ${explicitGradlePath}`);
+    throw new Error(
+      `build.gradle not found at specified path: ${explicitGradlePath}`,
+    );
   }
 
   const buildGradlePath = explicitGradlePath ?? findBuildGradle(projectRoot);
@@ -29,7 +34,7 @@ function readBuildGradle(projectRoot: string, explicitGradlePath?: string): {
     throw new Error('Could not find Android build.gradle');
   }
 
-  return {buildGradlePath, content: fs.readFileSync(buildGradlePath, 'utf8')};
+  return { buildGradlePath, content: fs.readFileSync(buildGradlePath, 'utf8') };
 }
 
 /**
@@ -39,9 +44,12 @@ function readBuildGradle(projectRoot: string, explicitGradlePath?: string): {
  */
 export function getAndroidVersions(
   projectRoot: string,
-  explicitGradlePath?: string
-): {versionName: string; versionCode: string} {
-  const {buildGradlePath, content} = readBuildGradle(projectRoot, explicitGradlePath);
+  explicitGradlePath?: string,
+): { versionName: string; versionCode: string } {
+  const { buildGradlePath, content } = readBuildGradle(
+    projectRoot,
+    explicitGradlePath,
+  );
 
   const nameMatch = content.match(/versionName\s+["']([^"']+)["']/);
   const codeMatch = content.match(/versionCode\s+(\d+)/);
@@ -53,7 +61,7 @@ export function getAndroidVersions(
     throw new Error(`No versionCode found in ${buildGradlePath}`);
   }
 
-  return {versionName: nameMatch[1], versionCode: codeMatch[1]};
+  return { versionName: nameMatch[1], versionCode: codeMatch[1] };
 }
 
 /**
@@ -61,10 +69,18 @@ export function getAndroidVersions(
  * distinct literals are present (for example a flavor override), since the
  * effective id then depends on the build variant.
  */
-export function getAndroidAppId(projectRoot: string, explicitGradlePath?: string): string {
-  const {buildGradlePath, content} = readBuildGradle(projectRoot, explicitGradlePath);
+export function getAndroidAppId(
+  projectRoot: string,
+  explicitGradlePath?: string,
+): string {
+  const { buildGradlePath, content } = readBuildGradle(
+    projectRoot,
+    explicitGradlePath,
+  );
 
-  const ids = [...content.matchAll(/\bapplicationId\s+["']([^"']+)["']/g)].map(([, id]) => id);
+  const ids = [...content.matchAll(/\bapplicationId\s+["']([^"']+)["']/g)].map(
+    ([, id]) => id,
+  );
   const distinct = [...new Set(ids)];
 
   if (distinct.length === 0) {
@@ -74,7 +90,7 @@ export function getAndroidAppId(projectRoot: string, explicitGradlePath?: string
     const values = distinct.map((id) => `"${id}"`).join(', ');
     throw new Error(
       `Multiple applicationId values found in ${buildGradlePath}: ${values}.\n` +
-      `The effective id depends on the build variant, which cannot be resolved from the file.`
+        `The effective id depends on the build variant, which cannot be resolved from the file.`,
     );
   }
 
@@ -89,10 +105,12 @@ export function updateAndroidVersion(
   versionName: string,
   versionCode: number,
   verbose: boolean,
-  explicitGradlePath?: string
+  explicitGradlePath?: string,
 ): void {
   if (explicitGradlePath && !fs.existsSync(explicitGradlePath)) {
-    throw new Error(`build.gradle not found at specified path: ${explicitGradlePath}`);
+    throw new Error(
+      `build.gradle not found at specified path: ${explicitGradlePath}`,
+    );
   }
 
   const buildGradlePath = explicitGradlePath ?? findBuildGradle(projectRoot);

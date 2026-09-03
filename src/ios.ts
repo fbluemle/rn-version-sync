@@ -11,7 +11,7 @@ function findPbxproj(projectRoot: string): string | null {
   }
 
   // Look for .xcodeproj directories
-  const entries = fs.readdirSync(iosDir, {withFileTypes: true});
+  const entries = fs.readdirSync(iosDir, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isDirectory() && entry.name.endsWith('.xcodeproj')) {
       const pbxprojPath = path.join(iosDir, entry.name, 'project.pbxproj');
@@ -24,12 +24,17 @@ function findPbxproj(projectRoot: string): string | null {
   return null;
 }
 
-function readPbxproj(projectRoot: string, explicitPbxprojPath?: string): {
+function readPbxproj(
+  projectRoot: string,
+  explicitPbxprojPath?: string,
+): {
   pbxprojPath: string;
   content: string;
 } {
   if (explicitPbxprojPath && !fs.existsSync(explicitPbxprojPath)) {
-    throw new Error(`project.pbxproj not found at specified path: ${explicitPbxprojPath}`);
+    throw new Error(
+      `project.pbxproj not found at specified path: ${explicitPbxprojPath}`,
+    );
   }
 
   const pbxprojPath = explicitPbxprojPath ?? findPbxproj(projectRoot);
@@ -38,7 +43,7 @@ function readPbxproj(projectRoot: string, explicitPbxprojPath?: string): {
     throw new Error('Could not find iOS project.pbxproj');
   }
 
-  return {pbxprojPath, content: fs.readFileSync(pbxprojPath, 'utf8')};
+  return { pbxprojPath, content: fs.readFileSync(pbxprojPath, 'utf8') };
 }
 
 function unquote(value: string): string {
@@ -51,9 +56,12 @@ function unquote(value: string): string {
  */
 export function getIOSVersions(
   projectRoot: string,
-  explicitPbxprojPath?: string
-): {versionName: string; versionCode: string} {
-  const {pbxprojPath, content} = readPbxproj(projectRoot, explicitPbxprojPath);
+  explicitPbxprojPath?: string,
+): { versionName: string; versionCode: string } {
+  const { pbxprojPath, content } = readPbxproj(
+    projectRoot,
+    explicitPbxprojPath,
+  );
 
   const nameMatch = content.match(/MARKETING_VERSION\s*=\s*([^;]+);/);
   const codeMatch = content.match(/CURRENT_PROJECT_VERSION\s*=\s*([^;]+);/);
@@ -81,7 +89,10 @@ const APPLICATION_PRODUCT_TYPE = 'com.apple.product-type.application';
 function getObject(content: string, id: string, pbxprojPath: string): string {
   const escapedId = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const match = content.match(
-    new RegExp(`^\\t\\t${escapedId}(?: /\\*.*?\\*/)? = \\{\\n([\\s\\S]*?)^\\t\\t};`, 'm')
+    new RegExp(
+      `^\\t\\t${escapedId}(?: /\\*.*?\\*/)? = \\{\\n([\\s\\S]*?)^\\t\\t};`,
+      'm',
+    ),
   );
 
   if (!match) {
@@ -96,7 +107,9 @@ function getObject(content: string, id: string, pbxprojPath: string): string {
  * the trailing comment.
  */
 function getEntry(block: string, key: string): string | undefined {
-  const match = block.match(new RegExp(`^[ \\t]*${key} = ([^;]+?)(?: /\\*.*?\\*/)?;`, 'm'));
+  const match = block.match(
+    new RegExp(`^[ \\t]*${key} = ([^;]+?)(?: /\\*.*?\\*/)?;`, 'm'),
+  );
   return match ? unquote(match[1]) : undefined;
 }
 
@@ -109,11 +122,15 @@ function getEntry(block: string, key: string): string | undefined {
 export function getIOSAppId(
   projectRoot: string,
   explicitPbxprojPath?: string,
-  configuration = 'Release'
+  configuration = 'Release',
 ): string {
-  const {pbxprojPath, content} = readPbxproj(projectRoot, explicitPbxprojPath);
+  const { pbxprojPath, content } = readPbxproj(
+    projectRoot,
+    explicitPbxprojPath,
+  );
 
-  const targetRegex = /^\t\t(\S+?)(?: \/\*.*?\*\/)? = \{\n\t\t\tisa = PBXNativeTarget;\n([\s\S]*?)^\t\t};/gm;
+  const targetRegex =
+    /^\t\t(\S+?)(?: \/\*.*?\*\/)? = \{\n\t\t\tisa = PBXNativeTarget;\n([\s\S]*?)^\t\t};/gm;
   const targets = [...content.matchAll(targetRegex)]
     .map(([, id, block]) => ({
       name: getEntry(block, 'name') ?? id,
@@ -127,26 +144,35 @@ export function getIOSAppId(
   }
   if (targets.length > 1) {
     const names = targets.map((target) => `"${target.name}"`).join(', ');
-    throw new Error(`Multiple application targets found in ${pbxprojPath}: ${names}`);
+    throw new Error(
+      `Multiple application targets found in ${pbxprojPath}: ${names}`,
+    );
   }
 
   const target = targets[0];
   if (!target.configListId) {
-    throw new Error(`Target "${target.name}" has no buildConfigurationList in ${pbxprojPath}`);
+    throw new Error(
+      `Target "${target.name}" has no buildConfigurationList in ${pbxprojPath}`,
+    );
   }
 
   const listBlock = getObject(content, target.configListId, pbxprojPath);
   const arrayMatch = listBlock.match(/buildConfigurations = \(([\s\S]*?)\);/);
-  const configs = [...(arrayMatch?.[1] ?? '').matchAll(/^[ \t]*(\S+?)(?: \/\*.*?\*\/)?,$/gm)]
-    .map(([, id]) => ({id, block: getObject(content, id, pbxprojPath)}))
-    .map((config) => ({...config, name: getEntry(config.block, 'name') ?? config.id}));
+  const configs = [
+    ...(arrayMatch?.[1] ?? '').matchAll(/^[ \t]*(\S+?)(?: \/\*.*?\*\/)?,$/gm),
+  ]
+    .map(([, id]) => ({ id, block: getObject(content, id, pbxprojPath) }))
+    .map((config) => ({
+      ...config,
+      name: getEntry(config.block, 'name') ?? config.id,
+    }));
 
   const config = configs.find((c) => c.name === configuration);
   if (!config) {
     const names = configs.map((c) => `"${c.name}"`).join(', ');
     throw new Error(
       `Build configuration "${configuration}" not found for target "${target.name}" in ${pbxprojPath}` +
-      (names ? ` (available: ${names})` : '')
+        (names ? ` (available: ${names})` : ''),
     );
   }
 
@@ -154,13 +180,13 @@ export function getIOSAppId(
   if (appId === undefined) {
     throw new Error(
       `No PRODUCT_BUNDLE_IDENTIFIER in build configuration "${configuration}" of target "${target.name}" in ${pbxprojPath}.\n` +
-      `Only settings in project.pbxproj are read; xcconfig files and project-level settings are not resolved.`
+        `Only settings in project.pbxproj are read; xcconfig files and project-level settings are not resolved.`,
     );
   }
   if (/\$[({]/.test(appId)) {
     throw new Error(
       `PRODUCT_BUNDLE_IDENTIFIER "${appId}" in build configuration "${configuration}" of target "${target.name}" ` +
-      `references a build setting variable and cannot be resolved from ${pbxprojPath}`
+        `references a build setting variable and cannot be resolved from ${pbxprojPath}`,
     );
   }
 
@@ -175,10 +201,12 @@ export function updateIOSVersion(
   versionName: string,
   versionCode: string,
   verbose: boolean,
-  explicitPbxprojPath?: string
+  explicitPbxprojPath?: string,
 ): void {
   if (explicitPbxprojPath && !fs.existsSync(explicitPbxprojPath)) {
-    throw new Error(`project.pbxproj not found at specified path: ${explicitPbxprojPath}`);
+    throw new Error(
+      `project.pbxproj not found at specified path: ${explicitPbxprojPath}`,
+    );
   }
 
   const pbxprojPath = explicitPbxprojPath ?? findPbxproj(projectRoot);
@@ -194,7 +222,10 @@ export function updateIOSVersion(
   // Update MARKETING_VERSION (corresponds to CFBundleShortVersionString - version name)
   const marketingVersionRegex = /(MARKETING_VERSION\s*=\s*)([^;]+)(;)/g;
   if (marketingVersionRegex.test(content)) {
-    const newContent = content.replace(marketingVersionRegex, `$1${versionName}$3`);
+    const newContent = content.replace(
+      marketingVersionRegex,
+      `$1${versionName}$3`,
+    );
     if (newContent !== content) {
       content = newContent;
       modified = true;
@@ -203,13 +234,18 @@ export function updateIOSVersion(
   }
 
   // Update CURRENT_PROJECT_VERSION (corresponds to CFBundleVersion - version code)
-  const currentProjectVersionRegex = /(CURRENT_PROJECT_VERSION\s*=\s*)([^;]+)(;)/g;
+  const currentProjectVersionRegex =
+    /(CURRENT_PROJECT_VERSION\s*=\s*)([^;]+)(;)/g;
   if (currentProjectVersionRegex.test(content)) {
-    const newContent = content.replace(currentProjectVersionRegex, `$1${versionCode}$3`);
+    const newContent = content.replace(
+      currentProjectVersionRegex,
+      `$1${versionCode}$3`,
+    );
     if (newContent !== content) {
       content = newContent;
       modified = true;
-      if (verbose) console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
+      if (verbose)
+        console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
     }
   }
 
