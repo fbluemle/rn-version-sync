@@ -67,6 +67,6 @@ export function syncVersions(projectRoot: string, options: SyncOptions = {}): vo
 }
 
 // Re-export utilities for testing
-export {updateAndroidVersion, getAndroidVersions} from './android';
-export {updateIOSVersion, getIOSVersions} from './ios';
+export {updateAndroidVersion, getAndroidVersions, getAndroidAppId} from './android';
+export {updateIOSVersion, getIOSVersions, getIOSAppId} from './ios';
 export {getPackageVersion} from './utils';

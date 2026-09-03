@@ -1,13 +1,27 @@
 #!/usr/bin/env node
 
 import {program} from 'commander';
-import {syncVersions, resolveVersions, getAndroidVersions, getIOSVersions, Platform} from '.';
+import {
+  syncVersions,
+  resolveVersions,
+  getAndroidVersions,
+  getIOSVersions,
+  getAndroidAppId,
+  getIOSAppId,
+} from '.';
 import * as fs from 'fs';
 import * as path from 'path';
 
 const packageJson = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')
 );
+
+// Read-only flags that print a single value to stdout; keyed by commander's option name
+const printFlags: Record<string, string> = {
+  printVersionName: '--print-version-name',
+  printVersionCode: '--print-version-code',
+  printAppId: '--print-app-id',
+};
 
 program
   .name('rn-version-sync')
@@ -33,6 +47,14 @@ program
   .option(
     '--print-version-code <platform>',
     'Print version code (Android versionCode / iOS CURRENT_PROJECT_VERSION) read from the native file for "android" or "ios"'
+  )
+  .option(
+    '--print-app-id <platform>',
+    'Print app identifier (Android applicationId / iOS PRODUCT_BUNDLE_IDENTIFIER) read from the native file for "android" or "ios"'
+  )
+  .option(
+    '--configuration <name>',
+    'Xcode build configuration to read with --print-app-id ios (default: Release)'
   )
   .action((options) => {
     try {
@@ -67,15 +89,34 @@ program
         skipIos: options.skipIos,
       };
 
-      if (options.printVersionName || options.printVersionCode) {
-        const platform = (options.printVersionName ?? options.printVersionCode) as string;
+      if (options.configuration !== undefined && options.printAppId !== 'ios') {
+        throw new Error('--configuration can only be used with --print-app-id ios');
+      }
+
+      const activePrints = Object.keys(printFlags).filter((key) => options[key] !== undefined);
+
+      if (activePrints.length > 1) {
+        throw new Error(`Only one of ${Object.values(printFlags).join(', ')} may be used at a time`);
+      }
+
+      if (activePrints.length === 1) {
+        const [key] = activePrints;
+        const platform: string = options[key];
         if (platform !== 'android' && platform !== 'ios') {
-          throw new Error('--print-version-name / --print-version-code must be "android" or "ios"');
+          throw new Error(`${printFlags[key]} must be "android" or "ios"`);
         }
-        const versions = platform === 'android'
-          ? getAndroidVersions(projectDir, syncOptions.gradlePath)
-          : getIOSVersions(projectDir, syncOptions.pbxprojPath);
-        const value = options.printVersionName ? versions.versionName : versions.versionCode;
+
+        let value: string;
+        if (key === 'printAppId') {
+          value = platform === 'android'
+            ? getAndroidAppId(projectDir, syncOptions.gradlePath)
+            : getIOSAppId(projectDir, syncOptions.pbxprojPath, options.configuration);
+        } else {
+          const versions = platform === 'android'
+            ? getAndroidVersions(projectDir, syncOptions.gradlePath)
+            : getIOSVersions(projectDir, syncOptions.pbxprojPath);
+          value = key === 'printVersionName' ? versions.versionName : versions.versionCode;
+        }
         process.stdout.write(`${value}\n`);
         return;
       }
