@@ -68,8 +68,13 @@ export class TestProject {
       );
     }
 
-    if (options.iosTargets !== undefined || options.ios !== false) {
-      const targets = options.iosTargets ?? [{name: 'TestApp', configs: options.ios ?? defaults.ios}];
+    const targets =
+      options.iosTargets ??
+      (options.ios === false
+        ? undefined
+        : [{name: 'TestApp', configs: options.ios ?? defaults.ios}]);
+
+    if (targets !== undefined) {
       const xcodeprojDir = path.join(this.root, 'ios', 'TestApp.xcodeproj');
       fs.mkdirSync(xcodeprojDir, {recursive: true});
       fs.writeFileSync(
