@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 export interface SemverComponents {
   major: number;
@@ -15,24 +15,24 @@ export function getPackageVersion(projectRoot: string): string {
   if (!fs.existsSync(packagePath)) {
     throw new Error(
       `package.json not found at: ${packagePath}\n` +
-      `Make sure you're running this command from your React Native project root.`
+        `Make sure you're running this command from your React Native project root.`,
     );
   }
 
-  let packageJson: any;
+  let packageJson: { version?: string };
   try {
     packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
   } catch (error) {
     throw new Error(
       `Failed to parse package.json at: ${packagePath}\n` +
-      `Error: ${(error as Error).message}`
+        `Error: ${(error as Error).message}`,
     );
   }
 
   if (!packageJson.version) {
     throw new Error(
       `No "version" field found in package.json at: ${packagePath}\n` +
-      `Add a version field like: "version": "1.0.0"`
+        `Add a version field like: "version": "1.0.0"`,
     );
   }
 
@@ -50,7 +50,7 @@ export function parseSemver(version: string): SemverComponents {
   if (parts.length !== 3) {
     throw new Error(
       `Invalid semver format: "${version}"\n` +
-      `Expected format: MAJOR.MINOR.PATCH (e.g., "1.2.3")`
+        `Expected format: MAJOR.MINOR.PATCH (e.g., "1.2.3")`,
     );
   }
 
@@ -58,14 +58,14 @@ export function parseSemver(version: string): SemverComponents {
   const minor = parseInt(parts[1], 10);
   const patch = parseInt(parts[2], 10);
 
-  if (isNaN(major) || isNaN(minor) || isNaN(patch)) {
+  if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
     throw new Error(
       `Invalid semver format: "${version}"\n` +
-      `Version components must be numbers (got: ${parts[0]}.${parts[1]}.${parts[2]})`
+        `Version components must be numbers (got: ${parts[0]}.${parts[1]}.${parts[2]})`,
     );
   }
 
-  return {major, minor, patch};
+  return { major, minor, patch };
 }
 
 /**
@@ -77,14 +77,14 @@ export const MAX_VERSION_CODE = 2147483647;
  * Calculate version code from semver using formula: 10000*major + 100*minor + patch
  */
 export function calculateVersionCode(version: string): number {
-  const {major, minor, patch} = parseSemver(version);
+  const { major, minor, patch } = parseSemver(version);
   const versionCode = 10000 * major + 100 * minor + patch;
 
   if (versionCode > MAX_VERSION_CODE) {
     throw new Error(
       `Calculated version code ${versionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
-      `Version ${version} is too high for the formula (10000*major + 100*minor + patch).\n` +
-      `Use --version-code flag to manually specify a version code.`
+        `Version ${version} is too high for the formula (10000*major + 100*minor + patch).\n` +
+        `Use --version-code flag to manually specify a version code.`,
     );
   }
 

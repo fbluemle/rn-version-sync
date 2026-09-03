@@ -1,26 +1,38 @@
-import {describe, it, expect, afterEach} from 'vitest';
-import {parseSemver, calculateVersionCode, getPackageVersion} from '../utils';
-import {TestProject} from './helpers';
+import { afterEach, describe, expect, it } from 'vitest';
+import { calculateVersionCode, getPackageVersion, parseSemver } from '../utils';
+import { TestProject } from './helpers';
 
 describe('parseSemver', () => {
   it('parses a standard semver string', () => {
-    expect(parseSemver('1.2.3')).toEqual({major: 1, minor: 2, patch: 3});
+    expect(parseSemver('1.2.3')).toEqual({ major: 1, minor: 2, patch: 3 });
   });
 
   it('parses zero components', () => {
-    expect(parseSemver('0.0.0')).toEqual({major: 0, minor: 0, patch: 0});
+    expect(parseSemver('0.0.0')).toEqual({ major: 0, minor: 0, patch: 0 });
   });
 
   it('strips pre-release suffix', () => {
-    expect(parseSemver('1.2.3-beta.1')).toEqual({major: 1, minor: 2, patch: 3});
+    expect(parseSemver('1.2.3-beta.1')).toEqual({
+      major: 1,
+      minor: 2,
+      patch: 3,
+    });
   });
 
   it('strips build metadata', () => {
-    expect(parseSemver('1.2.3+build.123')).toEqual({major: 1, minor: 2, patch: 3});
+    expect(parseSemver('1.2.3+build.123')).toEqual({
+      major: 1,
+      minor: 2,
+      patch: 3,
+    });
   });
 
   it('strips both pre-release and build metadata', () => {
-    expect(parseSemver('1.2.3-beta.1+build.123')).toEqual({major: 1, minor: 2, patch: 3});
+    expect(parseSemver('1.2.3-beta.1+build.123')).toEqual({
+      major: 1,
+      minor: 2,
+      patch: 3,
+    });
   });
 
   it('throws on two-part version', () => {
@@ -28,7 +40,9 @@ describe('parseSemver', () => {
   });
 
   it('throws on non-numeric components', () => {
-    expect(() => parseSemver('a.b.c')).toThrow('Version components must be numbers');
+    expect(() => parseSemver('a.b.c')).toThrow(
+      'Version components must be numbers',
+    );
   });
 });
 
@@ -50,7 +64,9 @@ describe('calculateVersionCode', () => {
   });
 
   it('throws when calculated code exceeds 32-bit signed int max', () => {
-    expect(() => calculateVersionCode('999999.0.0')).toThrow('exceeds maximum value');
+    expect(() => calculateVersionCode('999999.0.0')).toThrow(
+      'exceeds maximum value',
+    );
   });
 });
 
@@ -62,23 +78,28 @@ describe('getPackageVersion', () => {
   });
 
   it('reads version from package.json', () => {
-    project = new TestProject({version: '3.4.5', android: false, ios: false});
+    project = new TestProject({ version: '3.4.5', android: false, ios: false });
     expect(getPackageVersion(project.root)).toBe('3.4.5');
   });
 
   it('throws when package.json is missing', () => {
-    project = new TestProject({android: false, ios: false});
-    const {rmSync} = require('fs');
-    const {join} = require('path');
+    project = new TestProject({ android: false, ios: false });
+    const { rmSync } = require('node:fs');
+    const { join } = require('node:path');
     rmSync(join(project.root, 'package.json'));
-    expect(() => getPackageVersion(project.root)).toThrow('package.json not found');
+    expect(() => getPackageVersion(project.root)).toThrow(
+      'package.json not found',
+    );
   });
 
   it('throws when version field is missing', () => {
-    project = new TestProject({android: false, ios: false});
-    const {writeFileSync} = require('fs');
-    const {join} = require('path');
-    writeFileSync(join(project.root, 'package.json'), JSON.stringify({name: 'test'}));
+    project = new TestProject({ android: false, ios: false });
+    const { writeFileSync } = require('node:fs');
+    const { join } = require('node:path');
+    writeFileSync(
+      join(project.root, 'package.json'),
+      JSON.stringify({ name: 'test' }),
+    );
     expect(() => getPackageVersion(project.root)).toThrow('No "version" field');
   });
 });

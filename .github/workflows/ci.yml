@@ -17,5 +17,6 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: yarn --frozen-lockfile
+      - run: yarn lint
       - run: yarn tsc
       - run: yarn test

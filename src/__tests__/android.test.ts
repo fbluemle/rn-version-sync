@@ -1,7 +1,11 @@
-import {describe, it, expect, afterEach} from 'vitest';
-import * as fs from 'fs';
-import {updateAndroidVersion, getAndroidVersions, getAndroidAppId} from '../android';
-import {TestProject} from './helpers';
+import * as fs from 'node:fs';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  getAndroidAppId,
+  getAndroidVersions,
+  updateAndroidVersion,
+} from '../android';
+import { TestProject } from './helpers';
 
 describe('updateAndroidVersion', () => {
   let project: TestProject;
@@ -11,7 +15,7 @@ describe('updateAndroidVersion', () => {
   });
 
   it('updates versionName and versionCode', () => {
-    project = new TestProject({ios: false});
+    project = new TestProject({ ios: false });
 
     updateAndroidVersion(project.root, '2.3.4', 20304, false);
 
@@ -22,7 +26,7 @@ describe('updateAndroidVersion', () => {
 
   it('does not write file when nothing changed', () => {
     project = new TestProject({
-      android: {versionName: '1.2.3', versionCode: 10203},
+      android: { versionName: '1.2.3', versionCode: 10203 },
       ios: false,
     });
 
@@ -33,14 +37,14 @@ describe('updateAndroidVersion', () => {
   });
 
   it('skips silently when build.gradle is missing', () => {
-    project = new TestProject({android: false, ios: false});
+    project = new TestProject({ android: false, ios: false });
     // Should not throw
     updateAndroidVersion(project.root, '1.0.0', 10000, false);
   });
 
   it('handles single-quoted versionName', () => {
     project = new TestProject({
-      android: {versionName: '1.0.0', versionCode: 1, quote: "'"},
+      android: { versionName: '1.0.0', versionCode: 1, quote: "'" },
       ios: false,
     });
 
@@ -51,19 +55,31 @@ describe('updateAndroidVersion', () => {
   });
 
   it('uses explicit gradlePath when provided', () => {
-    project = new TestProject({ios: false});
+    project = new TestProject({ ios: false });
 
-    updateAndroidVersion(project.root, '5.0.0', 50000, false, project.gradlePath());
+    updateAndroidVersion(
+      project.root,
+      '5.0.0',
+      50000,
+      false,
+      project.gradlePath(),
+    );
 
     const content = project.readGradle();
     expect(content).toContain('versionName "5.0.0"');
   });
 
   it('throws when explicit gradlePath does not exist', () => {
-    project = new TestProject({android: false, ios: false});
+    project = new TestProject({ android: false, ios: false });
 
     expect(() =>
-      updateAndroidVersion(project.root, '1.0.0', 10000, false, '/nonexistent/build.gradle')
+      updateAndroidVersion(
+        project.root,
+        '1.0.0',
+        10000,
+        false,
+        '/nonexistent/build.gradle',
+      ),
     ).toThrow('build.gradle not found at specified path');
   });
 });
@@ -77,7 +93,7 @@ describe('getAndroidVersions', () => {
 
   it('reads versionName and versionCode from build.gradle', () => {
     project = new TestProject({
-      android: {versionName: '1.2.3', versionCode: 1020300},
+      android: { versionName: '1.2.3', versionCode: 1020300 },
       ios: false,
     });
 
@@ -89,7 +105,7 @@ describe('getAndroidVersions', () => {
 
   it('preserves the version code as written (does not recompute)', () => {
     project = new TestProject({
-      android: {versionName: '1.2.3', versionCode: 42},
+      android: { versionName: '1.2.3', versionCode: 42 },
       ios: false,
     });
 
@@ -97,9 +113,9 @@ describe('getAndroidVersions', () => {
   });
 
   it('throws when build.gradle is missing', () => {
-    project = new TestProject({android: false, ios: false});
+    project = new TestProject({ android: false, ios: false });
     expect(() => getAndroidVersions(project.root)).toThrow(
-      'Could not find Android build.gradle'
+      'Could not find Android build.gradle',
     );
   });
 });
@@ -113,7 +129,7 @@ describe('getAndroidAppId', () => {
 
   it('reads applicationId, ignoring namespace and applicationIdSuffix', () => {
     project = new TestProject({
-      android: {applicationId: 'com.testapp', namespace: 'com.testapp.code'},
+      android: { applicationId: 'com.testapp', namespace: 'com.testapp.code' },
       ios: false,
     });
 
@@ -121,36 +137,49 @@ describe('getAndroidAppId', () => {
   });
 
   it('handles single-quoted applicationId', () => {
-    project = new TestProject({android: {quote: "'"}, ios: false});
+    project = new TestProject({ android: { quote: "'" }, ios: false });
 
     expect(getAndroidAppId(project.root)).toBe('com.testapp');
   });
 
   it('throws when flavors declare another applicationId', () => {
     project = new TestProject({
-      android: {flavorApplicationIds: ['com.testapp.other']},
+      android: { flavorApplicationIds: ['com.testapp.other'] },
       ios: false,
     });
 
-    expect(() => getAndroidAppId(project.root)).toThrow('Multiple applicationId values found');
-    expect(() => getAndroidAppId(project.root)).toThrow('"com.testapp", "com.testapp.other"');
+    expect(() => getAndroidAppId(project.root)).toThrow(
+      'Multiple applicationId values found',
+    );
+    expect(() => getAndroidAppId(project.root)).toThrow(
+      '"com.testapp", "com.testapp.other"',
+    );
   });
 
   it('throws when no applicationId is present', () => {
-    project = new TestProject({ios: false});
-    fs.writeFileSync(project.gradlePath(), 'android {\n    defaultConfig {\n    }\n}\n');
+    project = new TestProject({ ios: false });
+    fs.writeFileSync(
+      project.gradlePath(),
+      'android {\n    defaultConfig {\n    }\n}\n',
+    );
 
-    expect(() => getAndroidAppId(project.root)).toThrow('No applicationId found');
+    expect(() => getAndroidAppId(project.root)).toThrow(
+      'No applicationId found',
+    );
   });
 
   it('uses explicit gradlePath when provided', () => {
-    project = new TestProject({ios: false});
+    project = new TestProject({ ios: false });
 
-    expect(getAndroidAppId(project.root, project.gradlePath())).toBe('com.testapp');
+    expect(getAndroidAppId(project.root, project.gradlePath())).toBe(
+      'com.testapp',
+    );
   });
 
   it('throws when build.gradle is missing', () => {
-    project = new TestProject({android: false, ios: false});
-    expect(() => getAndroidAppId(project.root)).toThrow('Could not find Android build.gradle');
+    project = new TestProject({ android: false, ios: false });
+    expect(() => getAndroidAppId(project.root)).toThrow(
+      'Could not find Android build.gradle',
+    );
   });
 });

@@ -1,6 +1,10 @@
-import {updateAndroidVersion, getAndroidVersions} from './android';
-import {updateIOSVersion, getIOSVersions} from './ios';
-import {getPackageVersion, calculateVersionCode, MAX_VERSION_CODE} from './utils';
+import { updateAndroidVersion } from './android';
+import { updateIOSVersion } from './ios';
+import {
+  MAX_VERSION_CODE,
+  calculateVersionCode,
+  getPackageVersion,
+} from './utils';
 
 export type Platform = 'android' | 'ios';
 
@@ -23,7 +27,10 @@ export interface ResolvedVersions {
 /**
  * Resolve version name and code from options without writing any files
  */
-export function resolveVersions(projectRoot: string, options: SyncOptions = {}): ResolvedVersions {
+export function resolveVersions(
+  projectRoot: string,
+  options: SyncOptions = {},
+): ResolvedVersions {
   const manualVersionCode = options.versionCode;
   const versionName = options.versionName ?? getPackageVersion(projectRoot);
   let versionCode = manualVersionCode ?? calculateVersionCode(versionName);
@@ -38,19 +45,22 @@ export function resolveVersions(projectRoot: string, options: SyncOptions = {}):
   if (versionCode > MAX_VERSION_CODE) {
     throw new Error(
       `Version code ${versionCode} exceeds maximum value ${MAX_VERSION_CODE}.\n` +
-      `Android and iOS use 32-bit signed integers for version codes.`
+        `Android and iOS use 32-bit signed integers for version codes.`,
     );
   }
 
-  return {versionName, versionCode};
+  return { versionName, versionCode };
 }
 
 /**
  * Main function to sync versions
  */
-export function syncVersions(projectRoot: string, options: SyncOptions = {}): void {
-  const {verbose = false} = options;
-  const {versionName, versionCode} = resolveVersions(projectRoot, options);
+export function syncVersions(
+  projectRoot: string,
+  options: SyncOptions = {},
+): void {
+  const { verbose = false } = options;
+  const { versionName, versionCode } = resolveVersions(projectRoot, options);
 
   if (verbose) {
     console.log(`Syncing version name: ${versionName}`);
@@ -58,15 +68,31 @@ export function syncVersions(projectRoot: string, options: SyncOptions = {}): vo
   }
 
   if (!options.skipAndroid) {
-    updateAndroidVersion(projectRoot, versionName, versionCode, verbose, options.gradlePath);
+    updateAndroidVersion(
+      projectRoot,
+      versionName,
+      versionCode,
+      verbose,
+      options.gradlePath,
+    );
   }
 
   if (!options.skipIos) {
-    updateIOSVersion(projectRoot, versionName, versionCode.toString(), verbose, options.pbxprojPath);
+    updateIOSVersion(
+      projectRoot,
+      versionName,
+      versionCode.toString(),
+      verbose,
+      options.pbxprojPath,
+    );
   }
 }
 
 // Re-export utilities for testing
-export {updateAndroidVersion, getAndroidVersions, getAndroidAppId} from './android';
-export {updateIOSVersion, getIOSVersions, getIOSAppId} from './ios';
-export {getPackageVersion} from './utils';
+export {
+  getAndroidAppId,
+  getAndroidVersions,
+  updateAndroidVersion,
+} from './android';
+export { getIOSAppId, getIOSVersions, updateIOSVersion } from './ios';
+export { getPackageVersion } from './utils';
