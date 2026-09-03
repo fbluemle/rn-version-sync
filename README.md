@@ -142,7 +142,7 @@ sentry-cli releases new "$APP_ID@$NAME+$CODE"
 
 ## Requirements
 
-- Node.js >= 14
+- Node.js >= 20
 - Standard React Native project structure:
     - `package.json` in project root
     - Android: `android/app/build.gradle`
