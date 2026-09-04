@@ -65,6 +65,17 @@ describe('updateIOSVersion', () => {
     expect(updateIOSVersion(project.root, '1.0.0', '10000', false)).toBeNull();
   });
 
+  it('throws when the file has no version settings', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{ name: 'Release', version: null, buildNumber: null }],
+    });
+
+    expect(() =>
+      updateIOSVersion(project.root, '1.0.0', '10000', false),
+    ).toThrow('No MARKETING_VERSION found');
+  });
+
   it('does not write file when nothing changed', () => {
     project = new TestProject({
       android: false,

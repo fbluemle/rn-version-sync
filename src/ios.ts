@@ -279,8 +279,11 @@ export function getIOSAppId(
 }
 
 /**
- * Update iOS project.pbxproj with new version name and version code.
+ * Update iOS project.pbxproj with new version name and version code. Every
+ * MARKETING_VERSION and CURRENT_PROJECT_VERSION in the file is replaced, so
+ * app, test and extension targets stay in step as Xcode requires.
  * Returns the path of the file, or null when no project.pbxproj was found.
+ * Throws when the file has neither setting.
  */
 export function updateIOSVersion(
   projectRoot: string,
@@ -300,32 +303,34 @@ export function updateIOSVersion(
 
   // Update MARKETING_VERSION (corresponds to CFBundleShortVersionString - version name)
   const marketingVersionRegex = /(MARKETING_VERSION\s*=\s*)([^;]+)(;)/g;
-  if (marketingVersionRegex.test(content)) {
-    const newContent = content.replace(
-      marketingVersionRegex,
-      `$1${versionName}$3`,
-    );
-    if (newContent !== content) {
-      content = newContent;
-      modified = true;
-      if (verbose) console.log(`Updated MARKETING_VERSION to ${versionName}`);
-    }
+  if (!marketingVersionRegex.test(content)) {
+    throw new Error(`No MARKETING_VERSION found in ${pbxprojPath}`);
+  }
+  const withVersionName = content.replace(
+    marketingVersionRegex,
+    `$1${versionName}$3`,
+  );
+  if (withVersionName !== content) {
+    content = withVersionName;
+    modified = true;
+    if (verbose) console.log(`Updated MARKETING_VERSION to ${versionName}`);
   }
 
   // Update CURRENT_PROJECT_VERSION (corresponds to CFBundleVersion - version code)
   const currentProjectVersionRegex =
     /(CURRENT_PROJECT_VERSION\s*=\s*)([^;]+)(;)/g;
-  if (currentProjectVersionRegex.test(content)) {
-    const newContent = content.replace(
-      currentProjectVersionRegex,
-      `$1${versionCode}$3`,
-    );
-    if (newContent !== content) {
-      content = newContent;
-      modified = true;
-      if (verbose)
-        console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
-    }
+  if (!currentProjectVersionRegex.test(content)) {
+    throw new Error(`No CURRENT_PROJECT_VERSION found in ${pbxprojPath}`);
+  }
+  const withVersionCode = content.replace(
+    currentProjectVersionRegex,
+    `$1${versionCode}$3`,
+  );
+  if (withVersionCode !== content) {
+    content = withVersionCode;
+    modified = true;
+    if (verbose)
+      console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
   }
 
   if (modified) {

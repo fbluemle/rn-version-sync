@@ -30,7 +30,9 @@ Pre-release and build metadata (`1.2.3-beta.1`) are ignored when calculating
 the code; the version name is written as is. Only the version lines are
 modified, everything else in the files stays untouched. On iOS, every
 `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the project file is
-updated.
+updated, so app, test and extension targets stay in step as Xcode requires.
+A native file without these settings is an error rather than a silent
+no-op.
 
 ## Usage
 

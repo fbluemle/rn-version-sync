@@ -106,6 +106,7 @@ export function getAndroidAppId(
 /**
  * Update Android build.gradle with new version name and version code.
  * Returns the path of the file, or null when no build.gradle was found.
+ * Throws when the file has no versionName or versionCode.
  */
 export function updateAndroidVersion(
   projectRoot: string,
@@ -125,24 +126,29 @@ export function updateAndroidVersion(
 
   // Update versionName
   const versionNameRegex = /(versionName\s+["'])([^"']*)(['"])/;
-  if (versionNameRegex.test(content)) {
-    const newContent = content.replace(versionNameRegex, `$1${versionName}$3`);
-    if (newContent !== content) {
-      content = newContent;
-      modified = true;
-      if (verbose) console.log(`Updated versionName to ${versionName}`);
-    }
+  if (!versionNameRegex.test(content)) {
+    throw new Error(`No versionName found in ${buildGradlePath}`);
+  }
+  const withVersionName = content.replace(
+    versionNameRegex,
+    `$1${versionName}$3`,
+  );
+  if (withVersionName !== content) {
+    content = withVersionName;
+    modified = true;
+    if (verbose) console.log(`Updated versionName to ${versionName}`);
   }
 
   // Update versionCode with calculated value
   const versionCodeRegex = /(versionCode\s+)(\d+)/;
-  if (versionCodeRegex.test(content)) {
-    const newContent = content.replace(versionCodeRegex, `$1${versionCode}`);
-    if (newContent !== content) {
-      content = newContent;
-      modified = true;
-      if (verbose) console.log(`Updated versionCode to ${versionCode}`);
-    }
+  if (!versionCodeRegex.test(content)) {
+    throw new Error(`No versionCode found in ${buildGradlePath}`);
+  }
+  const withVersionCode = content.replace(versionCodeRegex, `$1${versionCode}`);
+  if (withVersionCode !== content) {
+    content = withVersionCode;
+    modified = true;
+    if (verbose) console.log(`Updated versionCode to ${versionCode}`);
   }
 
   if (modified) {
