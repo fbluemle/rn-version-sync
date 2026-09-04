@@ -94,7 +94,7 @@ no native file is left.
 | `--write` | Update the native files instead of only comparing them |
 | `--version-name <name>` | Use this version name instead of the `package.json` version. Requires `--version-code` unless it is semver. |
 | `--version-code <code>` | Use this version code instead of the calculated one |
-| `--reserve-builds <n>` | Multiply the calculated version code by `n` so each version owns `n` consecutive codes, e.g. for CI builds that bump the code per build (`100` turns `10203` into `1020300`). Ignored with `--version-code`. |
+| `--reserve-builds <n>` | Multiply the calculated version code by `n` so each version owns `n` consecutive codes, e.g. for CI builds that bump the code per build (`100` turns `10203` into `1020300`). Ignored with `--version-code`. Best set once as `reserveBuilds` in `package.json`, see [Configuration](#configuration). |
 | `--skip-android`, `--skip-ios` | Ignore that platform |
 | `--project-dir <dir>` | Project root (default: current directory) |
 | `--gradle-path <path>` | Android `build.gradle` to use, instead of `android/app/build.gradle` |
@@ -104,6 +104,32 @@ no native file is left.
 Relative `--gradle-path` and `--pbxproj-path` values are resolved against the
 project directory. Version codes must be positive integers up to
 `2147483647`, the 32-bit limit both platforms enforce.
+
+### Configuration
+
+Settings that are permanent for a project go under the `rn-version-sync` key
+of `package.json`, so the check, `--write` and the `version` script all use
+the same values without repeating them on every call:
+
+```json
+{
+  "rn-version-sync": {
+    "reserveBuilds": 100
+  }
+}
+```
+
+| Setting | Option |
+| ------- | ------ |
+| `reserveBuilds` (integer) | `--reserve-builds` |
+| `gradlePath` (string) | `--gradle-path` |
+| `pbxprojPath` (string) | `--pbxproj-path` |
+| `configuration` (string) | `--configuration` |
+| `skipAndroid`, `skipIos` (boolean) | `--skip-android`, `--skip-ios` |
+
+A command line option takes precedence over the configured value. Relative
+paths are resolved against the project directory, and an unknown setting or a
+value of the wrong type is an error.
 
 ## Reading values from native files
 
@@ -205,7 +231,7 @@ steps:
 The same functionality is available as a module, with type definitions:
 
 ```js
-const { checkVersions, syncVersions, readNativeValues } = require('rn-version-sync');
+const { checkVersions, syncVersions, readNativeValues, loadConfig } = require('rn-version-sync');
 
 checkVersions(process.cwd());
 // {
@@ -225,10 +251,15 @@ syncVersions(process.cwd(), { reserveBuilds: 100 });
 
 readNativeValues(process.cwd(), 'ios', { configuration: 'Staging' });
 // { appId: 'com.example.app.staging', versionName: '1.2.3', versionCode: '1020300' }
+
+loadConfig(process.cwd());
+// { reserveBuilds: 100 }
 ```
 
 `resolveVersions`, `formatTemplate` and `formatEnv` back the target row,
-`--format` and `--print-env` in the same way.
+`--format` and `--print-env` in the same way. Like the CLI, all functions fill
+in options that are not passed explicitly from the `rn-version-sync`
+configuration in `package.json`.
 
 ## Requirements
 

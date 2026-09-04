@@ -8,6 +8,7 @@ import {
   checkVersions,
   formatEnv,
   formatTemplate,
+  loadConfig,
   readNativeValues,
   syncVersions,
 } from '.';
@@ -105,6 +106,15 @@ program
     'Compare the package.json version with the native projects, or sync them with --write',
   )
   .version(packageJson.version)
+  .addHelpText(
+    'after',
+    `
+Project-wide defaults for --reserve-builds, --skip-android, --skip-ios,
+--gradle-path, --pbxproj-path and --configuration can be set in package.json,
+where a command line option takes precedence:
+
+  "rn-version-sync": { "reserveBuilds": 100 }`,
+  )
   .option('--write', 'Update the native files instead of only comparing them')
   .option(
     '--version-name <name>',
@@ -229,12 +239,16 @@ program
         return;
       }
 
+      // Label the iOS row with the configuration the values are read from
+      const configuration =
+        options.configuration ?? loadConfig(projectDir).configuration;
+
       if (options.write) {
         const result = syncVersions(projectDir, syncOptions);
         const labels = result.platforms.map((p) =>
           p.updated ? 'updated' : 'unchanged',
         );
-        console.log(renderStatus(result, labels, options.configuration));
+        console.log(renderStatus(result, labels, configuration));
         return;
       }
 
@@ -242,7 +256,7 @@ program
       const labels = status.platforms.map((p) =>
         p.inSync ? 'ok' : 'outdated',
       );
-      console.log(renderStatus(status, labels, options.configuration));
+      console.log(renderStatus(status, labels, configuration));
       if (status.platforms.some((p) => !p.inSync)) {
         console.error('Run with --write to update the native files.');
         process.exit(1);
