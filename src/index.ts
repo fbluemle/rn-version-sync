@@ -248,7 +248,7 @@ export function formatEnv(values: NativeValues): string {
   return output;
 }
 
-// Re-export utilities for testing
+// Lower-level platform functions for programmatic use
 export {
   getAndroidAppId,
   getAndroidVersions,
