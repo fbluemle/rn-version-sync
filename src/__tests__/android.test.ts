@@ -17,8 +17,9 @@ describe('updateAndroidVersion', () => {
   it('updates versionName and versionCode', () => {
     project = new TestProject({ ios: false });
 
-    updateAndroidVersion(project.root, '2.3.4', 20304, false);
+    const result = updateAndroidVersion(project.root, '2.3.4', 20304, false);
 
+    expect(result).toBe(project.gradlePath());
     const content = project.readGradle();
     expect(content).toContain('versionName "2.3.4"');
     expect(content).toContain('versionCode 20304');
@@ -36,10 +37,12 @@ describe('updateAndroidVersion', () => {
     expect(after).toBe(before);
   });
 
-  it('skips silently when build.gradle is missing', () => {
+  it('returns null when build.gradle is missing', () => {
     project = new TestProject({ android: false, ios: false });
-    // Should not throw
-    updateAndroidVersion(project.root, '1.0.0', 10000, false);
+
+    expect(
+      updateAndroidVersion(project.root, '1.0.0', 10000, false),
+    ).toBeNull();
   });
 
   it('handles single-quoted versionName', () => {

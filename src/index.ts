@@ -36,6 +36,13 @@ export function resolveVersions(
   options: SyncOptions = {},
 ): ResolvedVersions {
   const manualVersionCode = options.versionCode;
+  if (
+    manualVersionCode !== undefined &&
+    (!Number.isInteger(manualVersionCode) || manualVersionCode < 1)
+  ) {
+    throw new Error('version-code must be a positive integer');
+  }
+
   const versionName = options.versionName ?? getPackageVersion(projectRoot);
   let versionCode = manualVersionCode ?? calculateVersionCode(versionName);
 
@@ -56,13 +63,22 @@ export function resolveVersions(
   return { versionName, versionCode };
 }
 
+export interface SyncResult {
+  /** Path of the synced build.gradle; unset when skipped or not found */
+  android?: string;
+  /** Path of the synced project.pbxproj; unset when skipped or not found */
+  ios?: string;
+}
+
 /**
- * Main function to sync versions
+ * Write the resolved version name and code to the native files of the
+ * platforms that are not skipped. A platform whose file cannot be found is
+ * skipped with a warning; when no file was synced at all, an error is thrown.
  */
 export function syncVersions(
   projectRoot: string,
   options: SyncOptions = {},
-): void {
+): SyncResult {
   const { verbose = false } = options;
   const { versionName, versionCode } = resolveVersions(projectRoot, options);
 
@@ -71,25 +87,53 @@ export function syncVersions(
     console.log(`Using version code: ${versionCode}`);
   }
 
+  const result: SyncResult = {};
+
   if (!options.skipAndroid) {
-    updateAndroidVersion(
+    const gradlePath = updateAndroidVersion(
       projectRoot,
       versionName,
       versionCode,
       verbose,
       options.gradlePath,
     );
+    if (gradlePath) {
+      result.android = gradlePath;
+    } else {
+      console.warn(
+        'Warning: android/app/build.gradle not found, skipping Android. Pass --skip-android to silence this warning.',
+      );
+    }
   }
 
   if (!options.skipIos) {
-    updateIOSVersion(
+    const pbxprojPath = updateIOSVersion(
       projectRoot,
       versionName,
       versionCode.toString(),
       verbose,
       options.pbxprojPath,
     );
+    if (pbxprojPath) {
+      result.ios = pbxprojPath;
+    } else {
+      console.warn(
+        'Warning: ios/<Project>.xcodeproj/project.pbxproj not found, skipping iOS. Pass --skip-ios to silence this warning.',
+      );
+    }
   }
+
+  if (!result.android && !result.ios) {
+    throw new Error(
+      options.skipAndroid && options.skipIos
+        ? 'Nothing to sync: both platforms are skipped'
+        : `No native project files found in ${projectRoot}.\n` +
+            `Expected android/app/build.gradle or ios/<Project>.xcodeproj/project.pbxproj; ` +
+            `use --gradle-path or --pbxproj-path for other locations.`,
+    );
+  }
+
+  return result;
 }
 
 export interface ReadOptions {
@@ -204,7 +248,7 @@ export function formatEnv(values: NativeValues): string {
   return output;
 }
 
-// Re-export utilities for testing
+// Lower-level platform functions for programmatic use
 export {
   getAndroidAppId,
   getAndroidVersions,

@@ -2,14 +2,10 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { program } from 'commander';
+import { InvalidArgumentError, program } from 'commander';
 import {
   formatEnv,
   formatTemplate,
-  getAndroidAppId,
-  getAndroidVersions,
-  getIOSAppId,
-  getIOSVersions,
   readNativeValues,
   resolveVersions,
   syncVersions,
@@ -19,18 +15,32 @@ const packageJson = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
 );
 
-// Read-only flags that print to stdout; keyed by commander's option name
-const printFlags: Record<string, string> = {
-  printVersionName: '--print-version-name',
-  printVersionCode: '--print-version-code',
-  printAppId: '--print-app-id',
-  printEnv: '--print-env',
-  print: '--print',
+// Read-only flags that print to stdout, keyed by commander's option name.
+// Single-value flags render a fixed template; --print renders --format.
+const printFlags: Record<string, { flag: string; template?: string }> = {
+  printVersionName: {
+    flag: '--print-version-name',
+    template: '{versionName}',
+  },
+  printVersionCode: {
+    flag: '--print-version-code',
+    template: '{versionCode}',
+  },
+  printAppId: { flag: '--print-app-id', template: '{appId}' },
+  printEnv: { flag: '--print-env' },
+  print: { flag: '--print' },
 };
 
 // Output of --print without --format, in the style of --dry-run
 const DEFAULT_TEMPLATE =
   'appId: {appId}\nversionName: {versionName}\nversionCode: {versionCode}';
+
+function parseInteger(value: string): number {
+  if (!/^-?\d+$/.test(value)) {
+    throw new InvalidArgumentError('Not an integer.');
+  }
+  return Number(value);
+}
 
 program
   .name('rn-version-sync')
@@ -44,6 +54,7 @@ program
   .option(
     '--version-code <code>',
     'Override version code (default: calculated from semver as 10000*major + 100*minor + patch)',
+    parseInteger,
   )
   .option(
     '--project-dir <dir>',
@@ -54,6 +65,7 @@ program
   .option(
     '--reserve-builds <n>',
     'Reserve N build slots per version (e.g. 100 turns 10203 into 1020300)',
+    parseInteger,
   )
   .option('--skip-android', 'Skip Android version update')
   .option('--skip-ios', 'Skip iOS version update')
@@ -95,30 +107,11 @@ program
         ? path.resolve(options.projectDir)
         : process.cwd();
 
-      const versionCode = options.versionCode
-        ? parseInt(options.versionCode, 10)
-        : undefined;
-
-      if (versionCode !== undefined && Number.isNaN(versionCode)) {
-        throw new Error('version-code must be a valid number');
-      }
-
-      const reserveBuilds = options.reserveBuilds
-        ? parseInt(options.reserveBuilds, 10)
-        : undefined;
-
-      if (
-        reserveBuilds !== undefined &&
-        (Number.isNaN(reserveBuilds) || reserveBuilds < 1)
-      ) {
-        throw new Error('reserve-builds must be a positive integer');
-      }
-
       const syncOptions = {
         verbose: options.verbose,
         versionName: options.versionName,
-        versionCode,
-        reserveBuilds,
+        versionCode: options.versionCode,
+        reserveBuilds: options.reserveBuilds,
         gradlePath: options.gradlePath
           ? path.resolve(options.gradlePath)
           : undefined,
@@ -128,6 +121,20 @@ program
         skipAndroid: options.skipAndroid,
         skipIos: options.skipIos,
       };
+
+      const activePrints = Object.keys(printFlags).filter(
+        (key) => options[key] !== undefined,
+      );
+
+      const modes = activePrints.map((key) => printFlags[key].flag);
+      if (options.dryRun) {
+        modes.push('--dry-run');
+      }
+      if (modes.length > 1) {
+        throw new Error(
+          `Only one of ${modes.join(', ')} may be used at a time`,
+        );
+      }
 
       if (options.format !== undefined && options.print === undefined) {
         throw new Error('--format can only be used with --print');
@@ -140,21 +147,11 @@ program
         );
       }
 
-      const activePrints = Object.keys(printFlags).filter(
-        (key) => options[key] !== undefined,
-      );
-
-      if (activePrints.length > 1) {
-        throw new Error(
-          `Only one of ${Object.values(printFlags).join(', ')} may be used at a time`,
-        );
-      }
-
       if (activePrints.length === 1) {
         const [key] = activePrints;
         const platform: string = options[key];
         if (platform !== 'android' && platform !== 'ios') {
-          throw new Error(`${printFlags[key]} must be "android" or "ios"`);
+          throw new Error(`${printFlags[key].flag} must be "android" or "ios"`);
         }
 
         const readOptions = {
@@ -163,44 +160,21 @@ program
           configuration: options.configuration,
         };
 
-        if (key === 'print') {
-          const output = formatTemplate(
-            options.format ?? DEFAULT_TEMPLATE,
-            projectDir,
-            platform,
-            readOptions,
-          );
-          process.stdout.write(`${output}\n`);
-          return;
-        }
-
         if (key === 'printEnv') {
           const values = readNativeValues(projectDir, platform, readOptions);
           process.stdout.write(formatEnv(values));
           return;
         }
 
-        let value: string;
-        if (key === 'printAppId') {
-          value =
-            platform === 'android'
-              ? getAndroidAppId(projectDir, syncOptions.gradlePath)
-              : getIOSAppId(
-                  projectDir,
-                  syncOptions.pbxprojPath,
-                  options.configuration,
-                );
-        } else {
-          const versions =
-            platform === 'android'
-              ? getAndroidVersions(projectDir, syncOptions.gradlePath)
-              : getIOSVersions(projectDir, syncOptions.pbxprojPath);
-          value =
-            key === 'printVersionName'
-              ? versions.versionName
-              : versions.versionCode;
-        }
-        process.stdout.write(`${value}\n`);
+        const template =
+          printFlags[key].template ?? options.format ?? DEFAULT_TEMPLATE;
+        const output = formatTemplate(
+          template,
+          projectDir,
+          platform,
+          readOptions,
+        );
+        process.stdout.write(`${output}\n`);
         return;
       }
 

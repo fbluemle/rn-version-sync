@@ -2,17 +2,29 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Find build.gradle file in Android directory
+ * Locate build.gradle: the explicit path when given (which must exist),
+ * otherwise android/app/build.gradle if present.
  */
-function findBuildGradle(projectRoot: string): string | null {
-  const androidDir = path.join(projectRoot, 'android', 'app');
-  const buildGradlePath = path.join(androidDir, 'build.gradle');
-
-  if (fs.existsSync(buildGradlePath)) {
-    return buildGradlePath;
+function locateBuildGradle(
+  projectRoot: string,
+  explicitGradlePath?: string,
+): string | null {
+  if (explicitGradlePath) {
+    if (!fs.existsSync(explicitGradlePath)) {
+      throw new Error(
+        `build.gradle not found at specified path: ${explicitGradlePath}`,
+      );
+    }
+    return explicitGradlePath;
   }
 
-  return null;
+  const buildGradlePath = path.join(
+    projectRoot,
+    'android',
+    'app',
+    'build.gradle',
+  );
+  return fs.existsSync(buildGradlePath) ? buildGradlePath : null;
 }
 
 function readBuildGradle(
@@ -22,13 +34,7 @@ function readBuildGradle(
   buildGradlePath: string;
   content: string;
 } {
-  if (explicitGradlePath && !fs.existsSync(explicitGradlePath)) {
-    throw new Error(
-      `build.gradle not found at specified path: ${explicitGradlePath}`,
-    );
-  }
-
-  const buildGradlePath = explicitGradlePath ?? findBuildGradle(projectRoot);
+  const buildGradlePath = locateBuildGradle(projectRoot, explicitGradlePath);
 
   if (!buildGradlePath) {
     throw new Error('Could not find Android build.gradle');
@@ -98,7 +104,8 @@ export function getAndroidAppId(
 }
 
 /**
- * Update Android build.gradle with new version name and version code
+ * Update Android build.gradle with new version name and version code.
+ * Returns the path of the file, or null when no build.gradle was found.
  */
 export function updateAndroidVersion(
   projectRoot: string,
@@ -106,18 +113,11 @@ export function updateAndroidVersion(
   versionCode: number,
   verbose: boolean,
   explicitGradlePath?: string,
-): void {
-  if (explicitGradlePath && !fs.existsSync(explicitGradlePath)) {
-    throw new Error(
-      `build.gradle not found at specified path: ${explicitGradlePath}`,
-    );
-  }
-
-  const buildGradlePath = explicitGradlePath ?? findBuildGradle(projectRoot);
+): string | null {
+  const buildGradlePath = locateBuildGradle(projectRoot, explicitGradlePath);
 
   if (!buildGradlePath) {
-    if (verbose) console.log('Skipping Android: build.gradle not found');
-    return;
+    return null;
   }
 
   let content = fs.readFileSync(buildGradlePath, 'utf8');
@@ -149,4 +149,6 @@ export function updateAndroidVersion(
     fs.writeFileSync(buildGradlePath, content, 'utf8');
     if (verbose) console.log(`Updated ${buildGradlePath}`);
   }
+
+  return buildGradlePath;
 }
