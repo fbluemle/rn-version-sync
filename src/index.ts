@@ -36,6 +36,13 @@ export function resolveVersions(
   options: SyncOptions = {},
 ): ResolvedVersions {
   const manualVersionCode = options.versionCode;
+  if (
+    manualVersionCode !== undefined &&
+    (!Number.isInteger(manualVersionCode) || manualVersionCode < 1)
+  ) {
+    throw new Error('version-code must be a positive integer');
+  }
+
   const versionName = options.versionName ?? getPackageVersion(projectRoot);
   let versionCode = manualVersionCode ?? calculateVersionCode(versionName);
 

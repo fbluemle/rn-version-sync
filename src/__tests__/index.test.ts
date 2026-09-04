@@ -267,6 +267,20 @@ describe('resolveVersions', () => {
       'reserve-builds must be a positive integer',
     );
   });
+
+  it('throws when versionCode is not a positive integer', () => {
+    project = new TestProject({ version: '1.0.0', android: false, ios: false });
+
+    expect(() => resolveVersions(project.root, { versionCode: 0 })).toThrow(
+      'version-code must be a positive integer',
+    );
+    expect(() => resolveVersions(project.root, { versionCode: -5 })).toThrow(
+      'version-code must be a positive integer',
+    );
+    expect(() => resolveVersions(project.root, { versionCode: 1.5 })).toThrow(
+      'version-code must be a positive integer',
+    );
+  });
 });
 
 describe('readNativeValues', () => {

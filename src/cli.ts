@@ -2,7 +2,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { program } from 'commander';
+import { InvalidArgumentError, program } from 'commander';
 import {
   formatEnv,
   formatTemplate,
@@ -32,6 +32,13 @@ const printFlags: Record<string, string> = {
 const DEFAULT_TEMPLATE =
   'appId: {appId}\nversionName: {versionName}\nversionCode: {versionCode}';
 
+function parseInteger(value: string): number {
+  if (!/^-?\d+$/.test(value)) {
+    throw new InvalidArgumentError('Not an integer.');
+  }
+  return Number(value);
+}
+
 program
   .name('rn-version-sync')
   .description('Sync React Native version with native code')
@@ -44,6 +51,7 @@ program
   .option(
     '--version-code <code>',
     'Override version code (default: calculated from semver as 10000*major + 100*minor + patch)',
+    parseInteger,
   )
   .option(
     '--project-dir <dir>',
@@ -54,6 +62,7 @@ program
   .option(
     '--reserve-builds <n>',
     'Reserve N build slots per version (e.g. 100 turns 10203 into 1020300)',
+    parseInteger,
   )
   .option('--skip-android', 'Skip Android version update')
   .option('--skip-ios', 'Skip iOS version update')
@@ -95,30 +104,11 @@ program
         ? path.resolve(options.projectDir)
         : process.cwd();
 
-      const versionCode = options.versionCode
-        ? parseInt(options.versionCode, 10)
-        : undefined;
-
-      if (versionCode !== undefined && Number.isNaN(versionCode)) {
-        throw new Error('version-code must be a valid number');
-      }
-
-      const reserveBuilds = options.reserveBuilds
-        ? parseInt(options.reserveBuilds, 10)
-        : undefined;
-
-      if (
-        reserveBuilds !== undefined &&
-        (Number.isNaN(reserveBuilds) || reserveBuilds < 1)
-      ) {
-        throw new Error('reserve-builds must be a positive integer');
-      }
-
       const syncOptions = {
         verbose: options.verbose,
         versionName: options.versionName,
-        versionCode,
-        reserveBuilds,
+        versionCode: options.versionCode,
+        reserveBuilds: options.reserveBuilds,
         gradlePath: options.gradlePath
           ? path.resolve(options.gradlePath)
           : undefined,
