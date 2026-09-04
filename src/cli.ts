@@ -60,8 +60,14 @@ program
     '--project-dir <dir>',
     'Project root directory (default: current directory)',
   )
-  .option('--gradle-path <path>', 'Path to Android build.gradle')
-  .option('--pbxproj-path <path>', 'Path to iOS project.pbxproj')
+  .option(
+    '--gradle-path <path>',
+    'Path to Android build.gradle, relative to the project directory',
+  )
+  .option(
+    '--pbxproj-path <path>',
+    'Path to iOS project.pbxproj, relative to the project directory',
+  )
   .option(
     '--reserve-builds <n>',
     'Reserve N build slots per version (e.g. 100 turns 10203 into 1020300)',
@@ -113,10 +119,10 @@ program
         versionCode: options.versionCode,
         reserveBuilds: options.reserveBuilds,
         gradlePath: options.gradlePath
-          ? path.resolve(options.gradlePath)
+          ? path.resolve(projectDir, options.gradlePath)
           : undefined,
         pbxprojPath: options.pbxprojPath
-          ? path.resolve(options.pbxprojPath)
+          ? path.resolve(projectDir, options.pbxprojPath)
           : undefined,
         skipAndroid: options.skipAndroid,
         skipIos: options.skipIos,

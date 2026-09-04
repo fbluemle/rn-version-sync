@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TestProject, buildGradle } from './helpers';
+import { TestProject, buildGradle, buildPbxproj } from './helpers';
 
 const root = path.resolve(__dirname, '..', '..');
 const CLI = path.join(root, 'dist', 'cli.js');
@@ -225,23 +225,47 @@ describe('cli', () => {
       );
     });
 
-    it('resolves --gradle-path relative to the working directory', () => {
+    it('resolves --gradle-path and --pbxproj-path against --project-dir', () => {
       project = new TestProject({ android: false, ios: false });
-      const gradlePath = path.join('custom', 'build.gradle');
-      fs.mkdirSync(path.join(project.root, 'custom'));
+      const custom = path.join(project.root, 'custom');
+      fs.mkdirSync(custom);
       fs.writeFileSync(
-        path.join(project.root, gradlePath),
+        path.join(custom, 'build.gradle'),
         buildGradle({ versionCode: 7 }),
       );
-
-      const result = run(
-        project.root,
-        '--print-version-code',
-        'android',
-        '--gradle-path',
-        gradlePath,
+      fs.writeFileSync(
+        path.join(custom, 'project.pbxproj'),
+        buildPbxproj([
+          { name: 'App', configs: [{ name: 'Release', buildNumber: '8' }] },
+        ]),
       );
-      expect(result.stdout).toBe('7\n');
+      const other = new TestProject();
+
+      try {
+        const android = run(
+          other.root,
+          '--project-dir',
+          project.root,
+          '--print-version-code',
+          'android',
+          '--gradle-path',
+          path.join('custom', 'build.gradle'),
+        );
+        expect(android.stdout).toBe('7\n');
+
+        const ios = run(
+          other.root,
+          '--project-dir',
+          project.root,
+          '--print-version-code',
+          'ios',
+          '--pbxproj-path',
+          path.join('custom', 'project.pbxproj'),
+        );
+        expect(ios.stdout).toBe('8\n');
+      } finally {
+        other.cleanup();
+      }
     });
   });
 
