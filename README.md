@@ -77,8 +77,9 @@ nothing could be synced.
 | `--dry-run` | Print the resolved version name and code without writing anything |
 | `-v, --verbose` | Log every value and file as it is updated |
 
-Version codes must be positive integers up to `2147483647`, the 32-bit limit
-both platforms enforce.
+Relative `--gradle-path` and `--pbxproj-path` values are resolved against the
+project directory. Version codes must be positive integers up to
+`2147483647`, the 32-bit limit both platforms enforce.
 
 ## Reading values from native files
 
