@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   formatEnv,
   formatTemplate,
@@ -13,6 +13,7 @@ describe('syncVersions', () => {
 
   afterEach(() => {
     project?.cleanup();
+    vi.restoreAllMocks();
   });
 
   it('syncs both Android and iOS', () => {
@@ -32,7 +33,7 @@ describe('syncVersions', () => {
   it('uses manual versionCode override', () => {
     project = new TestProject({ version: '1.2.3', ios: false });
 
-    syncVersions(project.root, { versionCode: 999 });
+    syncVersions(project.root, { versionCode: 999, skipIos: true });
 
     const gradle = project.readGradle();
     expect(gradle).toContain('versionCode 999');
@@ -49,10 +50,10 @@ describe('syncVersions', () => {
   it('is deterministic across repeated runs', () => {
     project = new TestProject({ version: '1.2.3', ios: false });
 
-    syncVersions(project.root);
+    syncVersions(project.root, { skipIos: true });
     const first = project.readGradle();
 
-    syncVersions(project.root);
+    syncVersions(project.root, { skipIos: true });
     const second = project.readGradle();
 
     expect(second).toBe(first);
@@ -77,6 +78,7 @@ describe('syncVersions', () => {
     syncVersions(project.root, {
       versionName: 'custom-build',
       versionCode: 42,
+      skipIos: true,
     });
 
     const gradle = project.readGradle();
@@ -135,6 +137,47 @@ describe('syncVersions', () => {
 
     const pbxproj = project.readPbxproj();
     expect(pbxproj).toContain('MARKETING_VERSION = 3.0.0;');
+  });
+
+  it('returns the paths of the synced files', () => {
+    project = new TestProject({ version: '1.2.3' });
+
+    const result = syncVersions(project.root);
+
+    expect(result).toEqual({
+      android: project.gradlePath(),
+      ios: project.pbxprojPath(),
+    });
+  });
+
+  it('warns and skips a platform whose file is missing', () => {
+    project = new TestProject({ version: '1.2.3', ios: false });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = syncVersions(project.root);
+
+    expect(result).toEqual({ android: project.gradlePath() });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('project.pbxproj not found'),
+    );
+    expect(project.readGradle()).toContain('versionName "1.2.3"');
+  });
+
+  it('throws when no native project files are found', () => {
+    project = new TestProject({ version: '1.2.3', android: false, ios: false });
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    expect(() => syncVersions(project.root)).toThrow(
+      'No native project files found',
+    );
+  });
+
+  it('throws when both platforms are skipped', () => {
+    project = new TestProject({ version: '1.2.3' });
+
+    expect(() =>
+      syncVersions(project.root, { skipAndroid: true, skipIos: true }),
+    ).toThrow('Nothing to sync');
   });
 });
 
