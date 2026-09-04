@@ -135,6 +135,109 @@ describe('getIOSVersions', () => {
     expect(getIOSVersions(project.root).versionCode).toBe('42');
   });
 
+  it('reads the requested configuration', () => {
+    project = new TestProject({
+      android: false,
+      ios: [
+        { name: 'Debug', version: '1.0.0', buildNumber: '1' },
+        { name: 'Release', version: '2.0.0', buildNumber: '20000' },
+      ],
+    });
+
+    expect(getIOSVersions(project.root)).toEqual({
+      versionName: '2.0.0',
+      versionCode: '20000',
+    });
+    expect(getIOSVersions(project.root, undefined, 'Debug')).toEqual({
+      versionName: '1.0.0',
+      versionCode: '1',
+    });
+  });
+
+  it('ignores other targets listed before the application target', () => {
+    project = new TestProject({
+      android: false,
+      iosTargets: [
+        {
+          name: 'TestAppTests',
+          productType: UNIT_TEST_PRODUCT_TYPE,
+          configs: [{ name: 'Release', version: '9.9.9', buildNumber: '99' }],
+        },
+        {
+          name: 'TestApp',
+          configs: [
+            { name: 'Release', version: '1.2.3', buildNumber: '10203' },
+          ],
+        },
+      ],
+    });
+
+    expect(getIOSVersions(project.root)).toEqual({
+      versionName: '1.2.3',
+      versionCode: '10203',
+    });
+  });
+
+  it('falls back to the project-level configuration', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{ name: 'Release', version: null, buildNumber: null }],
+      iosProjectConfigs: [
+        { name: 'Release', version: '3.0.0', buildNumber: '30000' },
+      ],
+    });
+
+    expect(getIOSVersions(project.root)).toEqual({
+      versionName: '3.0.0',
+      versionCode: '30000',
+    });
+  });
+
+  it('prefers the target configuration over the project configuration', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{ name: 'Release', version: '1.0.0', buildNumber: null }],
+      iosProjectConfigs: [
+        { name: 'Release', version: '3.0.0', buildNumber: '30000' },
+      ],
+    });
+
+    expect(getIOSVersions(project.root)).toEqual({
+      versionName: '1.0.0',
+      versionCode: '30000',
+    });
+  });
+
+  it('throws when the configuration does not exist', () => {
+    project = new TestProject({ android: false });
+
+    expect(() => getIOSVersions(project.root, undefined, 'Staging')).toThrow(
+      'Build configuration "Staging" not found for target "TestApp"',
+    );
+  });
+
+  it('throws when a version setting is missing', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{ name: 'Release', version: '1.0.0', buildNumber: null }],
+    });
+
+    expect(() => getIOSVersions(project.root)).toThrow(
+      'No CURRENT_PROJECT_VERSION in build configuration "Release" of target "TestApp"',
+    );
+  });
+
+  it('throws when a version setting references a build setting variable', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{ name: 'Release', version: '"$(APP_VERSION)"' }],
+    });
+
+    expect(() => getIOSVersions(project.root)).toThrow(
+      'references a build setting variable',
+    );
+  });
+
   it('throws when project.pbxproj is missing', () => {
     project = new TestProject({ android: false, ios: false });
     expect(() => getIOSVersions(project.root)).toThrow(
@@ -246,6 +349,16 @@ describe('getIOSAppId', () => {
     expect(() => getIOSAppId(project.root, undefined, 'Staging')).toThrow(
       '(available: "Debug", "Release")',
     );
+  });
+
+  it('falls back to the project-level configuration', () => {
+    project = new TestProject({
+      android: false,
+      ios: [{ name: 'Release' }],
+      iosProjectConfigs: [{ name: 'Release', bundleId: 'com.testapp' }],
+    });
+
+    expect(getIOSAppId(project.root)).toBe('com.testapp');
   });
 
   it('throws when the configuration has no PRODUCT_BUNDLE_IDENTIFIER', () => {
