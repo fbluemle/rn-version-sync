@@ -16,8 +16,9 @@ describe('updateIOSVersion', () => {
       ios: [{ name: 'Release' }],
     });
 
-    updateIOSVersion(project.root, '2.3.4', '20304', false);
+    const result = updateIOSVersion(project.root, '2.3.4', '20304', false);
 
+    expect(result).toBe(project.pbxprojPath());
     const content = project.readPbxproj();
     expect(content).toContain('MARKETING_VERSION = 2.3.4;');
     expect(content).toContain('CURRENT_PROJECT_VERSION = 20304;');
@@ -58,10 +59,10 @@ describe('updateIOSVersion', () => {
     expect(buildMatches?.every((m) => m.includes('30000'))).toBe(true);
   });
 
-  it('skips silently when ios directory is missing', () => {
+  it('returns null when ios directory is missing', () => {
     project = new TestProject({ android: false, ios: false });
-    // Should not throw
-    updateIOSVersion(project.root, '1.0.0', '10000', false);
+
+    expect(updateIOSVersion(project.root, '1.0.0', '10000', false)).toBeNull();
   });
 
   it('does not write file when nothing changed', () => {

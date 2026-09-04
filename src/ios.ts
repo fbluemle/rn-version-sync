@@ -2,17 +2,28 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Find project.pbxproj file in iOS directory
+ * Locate project.pbxproj: the explicit path when given (which must exist),
+ * otherwise the first ios/<Project>.xcodeproj/project.pbxproj if present.
  */
-function findPbxproj(projectRoot: string): string | null {
+function locatePbxproj(
+  projectRoot: string,
+  explicitPbxprojPath?: string,
+): string | null {
+  if (explicitPbxprojPath) {
+    if (!fs.existsSync(explicitPbxprojPath)) {
+      throw new Error(
+        `project.pbxproj not found at specified path: ${explicitPbxprojPath}`,
+      );
+    }
+    return explicitPbxprojPath;
+  }
+
   const iosDir = path.join(projectRoot, 'ios');
   if (!fs.existsSync(iosDir)) {
     return null;
   }
 
-  // Look for .xcodeproj directories
-  const entries = fs.readdirSync(iosDir, { withFileTypes: true });
-  for (const entry of entries) {
+  for (const entry of fs.readdirSync(iosDir, { withFileTypes: true })) {
     if (entry.isDirectory() && entry.name.endsWith('.xcodeproj')) {
       const pbxprojPath = path.join(iosDir, entry.name, 'project.pbxproj');
       if (fs.existsSync(pbxprojPath)) {
@@ -31,13 +42,7 @@ function readPbxproj(
   pbxprojPath: string;
   content: string;
 } {
-  if (explicitPbxprojPath && !fs.existsSync(explicitPbxprojPath)) {
-    throw new Error(
-      `project.pbxproj not found at specified path: ${explicitPbxprojPath}`,
-    );
-  }
-
-  const pbxprojPath = explicitPbxprojPath ?? findPbxproj(projectRoot);
+  const pbxprojPath = locatePbxproj(projectRoot, explicitPbxprojPath);
 
   if (!pbxprojPath) {
     throw new Error('Could not find iOS project.pbxproj');
@@ -194,7 +199,8 @@ export function getIOSAppId(
 }
 
 /**
- * Update iOS project.pbxproj with new version name and version code
+ * Update iOS project.pbxproj with new version name and version code.
+ * Returns the path of the file, or null when no project.pbxproj was found.
  */
 export function updateIOSVersion(
   projectRoot: string,
@@ -202,18 +208,11 @@ export function updateIOSVersion(
   versionCode: string,
   verbose: boolean,
   explicitPbxprojPath?: string,
-): void {
-  if (explicitPbxprojPath && !fs.existsSync(explicitPbxprojPath)) {
-    throw new Error(
-      `project.pbxproj not found at specified path: ${explicitPbxprojPath}`,
-    );
-  }
-
-  const pbxprojPath = explicitPbxprojPath ?? findPbxproj(projectRoot);
+): string | null {
+  const pbxprojPath = locatePbxproj(projectRoot, explicitPbxprojPath);
 
   if (!pbxprojPath) {
-    if (verbose) console.log('Skipping iOS: project.pbxproj not found');
-    return;
+    return null;
   }
 
   let content = fs.readFileSync(pbxprojPath, 'utf8');
@@ -253,4 +252,6 @@ export function updateIOSVersion(
     fs.writeFileSync(pbxprojPath, content, 'utf8');
     if (verbose) console.log(`Updated ${pbxprojPath}`);
   }
+
+  return pbxprojPath;
 }
