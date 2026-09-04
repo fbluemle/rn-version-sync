@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import {
+  checkVersions,
   formatEnv,
   formatTemplate,
   readNativeValues,
@@ -13,7 +14,6 @@ describe('syncVersions', () => {
 
   afterEach(() => {
     project?.cleanup();
-    vi.restoreAllMocks();
   });
 
   it('syncs both Android and iOS', () => {
@@ -139,33 +139,60 @@ describe('syncVersions', () => {
     expect(pbxproj).toContain('MARKETING_VERSION = 3.0.0;');
   });
 
-  it('returns the paths of the synced files', () => {
+  it('reports the state of each platform after writing', () => {
     project = new TestProject({ version: '1.2.3' });
 
     const result = syncVersions(project.root);
 
-    expect(result).toEqual({
-      android: project.gradlePath(),
-      ios: project.pbxprojPath(),
-    });
+    expect(result.target).toEqual({ versionName: '1.2.3', versionCode: 10203 });
+    expect(result.platforms).toEqual([
+      {
+        platform: 'android',
+        path: project.gradlePath(),
+        appId: 'com.testapp',
+        versionName: '1.2.3',
+        versionCode: '10203',
+        inSync: true,
+        updated: true,
+      },
+      {
+        platform: 'ios',
+        path: project.pbxprojPath(),
+        appId: 'com.testapp',
+        versionName: '1.2.3',
+        versionCode: '10203',
+        inSync: true,
+        updated: true,
+      },
+    ]);
   });
 
-  it('warns and skips a platform whose file is missing', () => {
-    project = new TestProject({ version: '1.2.3', ios: false });
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('marks platforms that were already in sync as not updated', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      android: { versionName: '1.2.3', versionCode: 10203 },
+    });
 
     const result = syncVersions(project.root);
 
-    expect(result).toEqual({ android: project.gradlePath() });
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('project.pbxproj not found'),
-    );
+    expect(result.platforms.map((p) => [p.platform, p.updated])).toEqual([
+      ['android', false],
+      ['ios', true],
+    ]);
+  });
+
+  it('lists a platform whose file is missing', () => {
+    project = new TestProject({ version: '1.2.3', ios: false });
+
+    const result = syncVersions(project.root);
+
+    expect(result.platforms.map((p) => p.platform)).toEqual(['android']);
+    expect(result.missing).toEqual(['ios']);
     expect(project.readGradle()).toContain('versionName "1.2.3"');
   });
 
   it('throws when no native project files are found', () => {
     project = new TestProject({ version: '1.2.3', android: false, ios: false });
-    vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     expect(() => syncVersions(project.root)).toThrow(
       'No native project files found',
@@ -178,6 +205,112 @@ describe('syncVersions', () => {
     expect(() =>
       syncVersions(project.root, { skipAndroid: true, skipIos: true }),
     ).toThrow('Nothing to sync');
+  });
+});
+
+describe('checkVersions', () => {
+  let project: TestProject;
+
+  afterEach(() => {
+    project?.cleanup();
+  });
+
+  it('reports platforms out of sync without writing', () => {
+    project = new TestProject({ version: '1.2.3' });
+
+    const status = checkVersions(project.root);
+
+    expect(status).toMatchObject({
+      packageName: 'test-app',
+      packageVersion: '1.2.3',
+      target: { versionName: '1.2.3', versionCode: 10203 },
+      overridden: false,
+      platforms: [
+        { platform: 'android', versionCode: '1', inSync: false },
+        { platform: 'ios', versionCode: '1', inSync: false },
+      ],
+      missing: [],
+    });
+    expect(project.readGradle()).toContain('versionCode 1');
+  });
+
+  it('reports platforms in sync', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      android: { versionName: '1.2.3', versionCode: 10203 },
+      ios: [
+        {
+          name: 'Release',
+          version: '1.2.3',
+          buildNumber: '10203',
+          bundleId: 'com.testapp',
+        },
+      ],
+    });
+
+    const status = checkVersions(project.root);
+
+    expect(status.platforms.map((p) => p.inSync)).toEqual([true, true]);
+  });
+
+  it('compares against the overridden target', () => {
+    project = new TestProject({
+      version: '1.0.0',
+      android: { versionName: '2.0.0', versionCode: 2000000 },
+      ios: false,
+    });
+
+    expect(
+      checkVersions(project.root, { versionName: '2.0.0', reserveBuilds: 100 }),
+    ).toMatchObject({
+      target: { versionName: '2.0.0', versionCode: 2000000 },
+      overridden: true,
+      platforms: [{ inSync: true }],
+    });
+  });
+
+  it('does not treat reserveBuilds alone as an override', () => {
+    project = new TestProject({ version: '1.2.3', ios: false });
+
+    expect(checkVersions(project.root, { reserveBuilds: 100 })).toMatchObject({
+      target: { versionName: '1.2.3', versionCode: 1020300 },
+      overridden: false,
+    });
+  });
+
+  it('reads the iOS values of the requested configuration', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      android: false,
+      ios: [
+        {
+          name: 'Debug',
+          version: '1.2.3',
+          buildNumber: '10203',
+          bundleId: 'com.testapp',
+        },
+        {
+          name: 'Release',
+          version: '1.0.0',
+          buildNumber: '1',
+          bundleId: 'com.testapp',
+        },
+      ],
+    });
+
+    expect(checkVersions(project.root).platforms[0].inSync).toBe(false);
+    expect(
+      checkVersions(project.root, { configuration: 'Debug' }).platforms[0]
+        .inSync,
+    ).toBe(true);
+  });
+
+  it('throws when no native project files are found', () => {
+    project = new TestProject({ version: '1.2.3', android: false, ios: false });
+
+    expect(() => checkVersions(project.root)).toThrow(
+      'No native project files found',
+    );
   });
 });
 
@@ -342,7 +475,7 @@ describe('readNativeValues', () => {
   });
 
   it('throws when any value cannot be resolved', () => {
-    project = new TestProject({ android: false });
+    project = new TestProject({ android: false, ios: [{ name: 'Release' }] });
 
     expect(() => readNativeValues(project.root, 'ios')).toThrow(
       'No PRODUCT_BUNDLE_IDENTIFIER',
@@ -442,7 +575,7 @@ describe('formatTemplate', () => {
   });
 
   it('reads only the referenced values', () => {
-    project = new TestProject({ android: false });
+    project = new TestProject({ android: false, ios: [{ name: 'Release' }] });
 
     const template = '{versionName}+{versionCode}';
     expect(formatTemplate(template, project.root, 'ios')).toBe('1.0.0+1');

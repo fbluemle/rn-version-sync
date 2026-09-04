@@ -1,5 +1,12 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { calculateVersionCode, getPackageVersion, parseSemver } from '../utils';
+import {
+  calculateVersionCode,
+  getPackageInfo,
+  getPackageVersion,
+  parseSemver,
+} from '../utils';
 import { TestProject } from './helpers';
 
 describe('parseSemver', () => {
@@ -101,5 +108,27 @@ describe('getPackageVersion', () => {
       JSON.stringify({ name: 'test' }),
     );
     expect(() => getPackageVersion(project.root)).toThrow('No "version" field');
+  });
+});
+
+describe('getPackageInfo', () => {
+  let project: TestProject;
+
+  afterEach(() => {
+    project?.cleanup();
+  });
+
+  it('reads name and version from package.json', () => {
+    project = new TestProject({ version: '1.2.3' });
+    expect(getPackageInfo(project.root)).toEqual({
+      name: 'test-app',
+      version: '1.2.3',
+    });
+  });
+
+  it('returns nothing when package.json is missing', () => {
+    project = new TestProject();
+    fs.rmSync(path.join(project.root, 'package.json'));
+    expect(getPackageInfo(project.root)).toEqual({});
   });
 });

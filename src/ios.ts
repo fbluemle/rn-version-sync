@@ -5,7 +5,7 @@ import * as path from 'node:path';
  * Locate project.pbxproj: the explicit path when given (which must exist),
  * otherwise the first ios/<Project>.xcodeproj/project.pbxproj if present.
  */
-function locatePbxproj(
+export function locatePbxproj(
   projectRoot: string,
   explicitPbxprojPath?: string,
 ): string | null {
@@ -289,7 +289,6 @@ export function updateIOSVersion(
   projectRoot: string,
   versionName: string,
   versionCode: string,
-  verbose: boolean,
   explicitPbxprojPath?: string,
 ): string | null {
   const pbxprojPath = locatePbxproj(projectRoot, explicitPbxprojPath);
@@ -298,44 +297,26 @@ export function updateIOSVersion(
     return null;
   }
 
-  let content = fs.readFileSync(pbxprojPath, 'utf8');
-  let modified = false;
+  const original = fs.readFileSync(pbxprojPath, 'utf8');
 
-  // Update MARKETING_VERSION (corresponds to CFBundleShortVersionString - version name)
+  // MARKETING_VERSION corresponds to CFBundleShortVersionString (version name)
   const marketingVersionRegex = /(MARKETING_VERSION\s*=\s*)([^;]+)(;)/g;
-  if (!marketingVersionRegex.test(content)) {
+  if (!marketingVersionRegex.test(original)) {
     throw new Error(`No MARKETING_VERSION found in ${pbxprojPath}`);
   }
-  const withVersionName = content.replace(
-    marketingVersionRegex,
-    `$1${versionName}$3`,
-  );
-  if (withVersionName !== content) {
-    content = withVersionName;
-    modified = true;
-    if (verbose) console.log(`Updated MARKETING_VERSION to ${versionName}`);
-  }
-
-  // Update CURRENT_PROJECT_VERSION (corresponds to CFBundleVersion - version code)
+  // CURRENT_PROJECT_VERSION corresponds to CFBundleVersion (version code)
   const currentProjectVersionRegex =
     /(CURRENT_PROJECT_VERSION\s*=\s*)([^;]+)(;)/g;
-  if (!currentProjectVersionRegex.test(content)) {
+  if (!currentProjectVersionRegex.test(original)) {
     throw new Error(`No CURRENT_PROJECT_VERSION found in ${pbxprojPath}`);
   }
-  const withVersionCode = content.replace(
-    currentProjectVersionRegex,
-    `$1${versionCode}$3`,
-  );
-  if (withVersionCode !== content) {
-    content = withVersionCode;
-    modified = true;
-    if (verbose)
-      console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
-  }
 
-  if (modified) {
+  const content = original
+    .replace(marketingVersionRegex, `$1${versionName}$3`)
+    .replace(currentProjectVersionRegex, `$1${versionCode}$3`);
+
+  if (content !== original) {
     fs.writeFileSync(pbxprojPath, content, 'utf8');
-    if (verbose) console.log(`Updated ${pbxprojPath}`);
   }
 
   return pbxprojPath;

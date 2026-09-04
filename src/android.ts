@@ -5,7 +5,7 @@ import * as path from 'node:path';
  * Locate build.gradle: the explicit path when given (which must exist),
  * otherwise android/app/build.gradle if present.
  */
-function locateBuildGradle(
+export function locateBuildGradle(
   projectRoot: string,
   explicitGradlePath?: string,
 ): string | null {
@@ -112,7 +112,6 @@ export function updateAndroidVersion(
   projectRoot: string,
   versionName: string,
   versionCode: number,
-  verbose: boolean,
   explicitGradlePath?: string,
 ): string | null {
   const buildGradlePath = locateBuildGradle(projectRoot, explicitGradlePath);
@@ -121,39 +120,23 @@ export function updateAndroidVersion(
     return null;
   }
 
-  let content = fs.readFileSync(buildGradlePath, 'utf8');
-  let modified = false;
+  const original = fs.readFileSync(buildGradlePath, 'utf8');
 
-  // Update versionName
   const versionNameRegex = /(versionName\s+["'])([^"']*)(['"])/;
-  if (!versionNameRegex.test(content)) {
+  if (!versionNameRegex.test(original)) {
     throw new Error(`No versionName found in ${buildGradlePath}`);
   }
-  const withVersionName = content.replace(
-    versionNameRegex,
-    `$1${versionName}$3`,
-  );
-  if (withVersionName !== content) {
-    content = withVersionName;
-    modified = true;
-    if (verbose) console.log(`Updated versionName to ${versionName}`);
-  }
-
-  // Update versionCode with calculated value
   const versionCodeRegex = /(versionCode\s+)(\d+)/;
-  if (!versionCodeRegex.test(content)) {
+  if (!versionCodeRegex.test(original)) {
     throw new Error(`No versionCode found in ${buildGradlePath}`);
   }
-  const withVersionCode = content.replace(versionCodeRegex, `$1${versionCode}`);
-  if (withVersionCode !== content) {
-    content = withVersionCode;
-    modified = true;
-    if (verbose) console.log(`Updated versionCode to ${versionCode}`);
-  }
 
-  if (modified) {
+  const content = original
+    .replace(versionNameRegex, `$1${versionName}$3`)
+    .replace(versionCodeRegex, `$1${versionCode}`);
+
+  if (content !== original) {
     fs.writeFileSync(buildGradlePath, content, 'utf8');
-    if (verbose) console.log(`Updated ${buildGradlePath}`);
   }
 
   return buildGradlePath;
