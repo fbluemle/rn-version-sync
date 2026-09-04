@@ -314,8 +314,8 @@ describe('readNativeValues', () => {
         {
           name: 'Debug',
           bundleId: 'com.testapp.debug',
-          version: '1.2.3',
-          buildNumber: '10203',
+          version: '1.2.4',
+          buildNumber: '10204',
         },
         {
           name: 'Release',
@@ -332,10 +332,13 @@ describe('readNativeValues', () => {
       versionCode: '10203',
     });
 
-    const debug = readNativeValues(project.root, 'ios', {
-      configuration: 'Debug',
+    expect(
+      readNativeValues(project.root, 'ios', { configuration: 'Debug' }),
+    ).toEqual({
+      appId: 'com.testapp.debug',
+      versionName: '1.2.4',
+      versionCode: '10204',
     });
-    expect(debug.appId).toBe('com.testapp.debug');
   });
 
   it('throws when any value cannot be resolved', () => {

@@ -105,7 +105,7 @@ program
   )
   .option(
     '--configuration <name>',
-    'Xcode build configuration for the iOS app id with --print-app-id, --print-env or --print (default: Release)',
+    'Xcode build configuration to read iOS values from with the --print* flags (default: Release)',
   )
   .action((options) => {
     try {
@@ -146,10 +146,12 @@ program
         throw new Error('--format can only be used with --print');
       }
 
-      const withAppId = [options.printAppId, options.printEnv, options.print];
-      if (options.configuration !== undefined && !withAppId.includes('ios')) {
+      if (
+        options.configuration !== undefined &&
+        !activePrints.some((key) => options[key] === 'ios')
+      ) {
         throw new Error(
-          '--configuration can only be used with --print-app-id, --print-env or --print for ios',
+          '--configuration can only be used when printing ios values',
         );
       }
 

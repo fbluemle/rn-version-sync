@@ -55,35 +55,6 @@ function unquote(value: string): string {
   return value.trim().replace(/^"(.*)"$/, '$1');
 }
 
-/**
- * Read MARKETING_VERSION (version name) and CURRENT_PROJECT_VERSION (version code)
- * from project.pbxproj as written. Returns the first match for each.
- */
-export function getIOSVersions(
-  projectRoot: string,
-  explicitPbxprojPath?: string,
-): { versionName: string; versionCode: string } {
-  const { pbxprojPath, content } = readPbxproj(
-    projectRoot,
-    explicitPbxprojPath,
-  );
-
-  const nameMatch = content.match(/MARKETING_VERSION\s*=\s*([^;]+);/);
-  const codeMatch = content.match(/CURRENT_PROJECT_VERSION\s*=\s*([^;]+);/);
-
-  if (!nameMatch) {
-    throw new Error(`No MARKETING_VERSION found in ${pbxprojPath}`);
-  }
-  if (!codeMatch) {
-    throw new Error(`No CURRENT_PROJECT_VERSION found in ${pbxprojPath}`);
-  }
-
-  return {
-    versionName: unquote(nameMatch[1]),
-    versionCode: unquote(codeMatch[1]),
-  };
-}
-
 const APPLICATION_PRODUCT_TYPE = 'com.apple.product-type.application';
 
 /**
@@ -118,22 +89,37 @@ function getEntry(block: string, key: string): string | undefined {
   return match ? unquote(match[1]) : undefined;
 }
 
-/**
- * Read PRODUCT_BUNDLE_IDENTIFIER of the application target's build
- * configuration with the given name. The configuration is located through
- * the target's configuration list, not by position in the file, so test and
- * extension targets do not interfere.
- */
-export function getIOSAppId(
-  projectRoot: string,
-  explicitPbxprojPath?: string,
-  configuration = 'Release',
-): string {
-  const { pbxprojPath, content } = readPbxproj(
-    projectRoot,
-    explicitPbxprojPath,
-  );
+interface BuildConfiguration {
+  name: string;
+  block: string;
+}
 
+/**
+ * Build configurations of the XCConfigurationList with the given id.
+ */
+function getConfigurations(
+  content: string,
+  listId: string,
+  pbxprojPath: string,
+): BuildConfiguration[] {
+  const listBlock = getObject(content, listId, pbxprojPath);
+  const arrayMatch = listBlock.match(/buildConfigurations = \(([\s\S]*?)\);/);
+  return [
+    ...(arrayMatch?.[1] ?? '').matchAll(/^[ \t]*(\S+?)(?: \/\*.*?\*\/)?,$/gm),
+  ].map(([, id]) => {
+    const block = getObject(content, id, pbxprojPath);
+    return { name: getEntry(block, 'name') ?? id, block };
+  });
+}
+
+/**
+ * The single application target of the project and the id of its build
+ * configuration list.
+ */
+function getApplicationTarget(
+  content: string,
+  pbxprojPath: string,
+): { name: string; configListId: string } {
   const targetRegex =
     /^\t\t(\S+?)(?: \/\*.*?\*\/)? = \{\n\t\t\tisa = PBXNativeTarget;\n([\s\S]*?)^\t\t};/gm;
   const targets = [...content.matchAll(targetRegex)]
@@ -161,46 +147,143 @@ export function getIOSAppId(
     );
   }
 
-  const listBlock = getObject(content, target.configListId, pbxprojPath);
-  const arrayMatch = listBlock.match(/buildConfigurations = \(([\s\S]*?)\);/);
-  const configs = [
-    ...(arrayMatch?.[1] ?? '').matchAll(/^[ \t]*(\S+?)(?: \/\*.*?\*\/)?,$/gm),
-  ]
-    .map(([, id]) => ({ id, block: getObject(content, id, pbxprojPath) }))
-    .map((config) => ({
-      ...config,
-      name: getEntry(config.block, 'name') ?? config.id,
-    }));
+  return { name: target.name, configListId: target.configListId };
+}
 
-  const config = configs.find((c) => c.name === configuration);
-  if (!config) {
-    const names = configs.map((c) => `"${c.name}"`).join(', ');
+/**
+ * Id of the PBXProject object's build configuration list, if present.
+ */
+function getProjectConfigListId(content: string): string | undefined {
+  const match = content.match(
+    /^\t\t\S+?(?: \/\*.*?\*\/)? = \{\n\t\t\tisa = PBXProject;\n([\s\S]*?)^\t\t};/m,
+  );
+  return match ? getEntry(match[1], 'buildConfigurationList') : undefined;
+}
+
+interface AppConfiguration {
+  target: string;
+  configuration: string;
+  pbxprojPath: string;
+  /** Build setting value, or undefined when not set in project.pbxproj */
+  get(key: string): string | undefined;
+}
+
+/**
+ * Build settings of the application target's configuration with the given
+ * name. The configuration is located through the target's configuration
+ * list, not by position in the file, so test and extension targets do not
+ * interfere. Like Xcode, a setting missing from the target's configuration
+ * falls back to the project configuration of the same name; xcconfig files
+ * are not read.
+ */
+function readAppConfiguration(
+  projectRoot: string,
+  explicitPbxprojPath: string | undefined,
+  configuration: string,
+): AppConfiguration {
+  const { pbxprojPath, content } = readPbxproj(
+    projectRoot,
+    explicitPbxprojPath,
+  );
+  const target = getApplicationTarget(content, pbxprojPath);
+
+  const targetConfigs = getConfigurations(
+    content,
+    target.configListId,
+    pbxprojPath,
+  );
+  const targetConfig = targetConfigs.find((c) => c.name === configuration);
+  if (!targetConfig) {
+    const names = targetConfigs.map((c) => `"${c.name}"`).join(', ');
     throw new Error(
       `Build configuration "${configuration}" not found for target "${target.name}" in ${pbxprojPath}` +
         (names ? ` (available: ${names})` : ''),
     );
   }
 
-  const appId = getEntry(config.block, 'PRODUCT_BUNDLE_IDENTIFIER');
-  if (appId === undefined) {
-    throw new Error(
-      `No PRODUCT_BUNDLE_IDENTIFIER in build configuration "${configuration}" of target "${target.name}" in ${pbxprojPath}.\n` +
-        `Only settings in project.pbxproj are read; xcconfig files and project-level settings are not resolved.`,
-    );
-  }
-  if (/\$[({]/.test(appId)) {
-    throw new Error(
-      `PRODUCT_BUNDLE_IDENTIFIER "${appId}" in build configuration "${configuration}" of target "${target.name}" ` +
-        `references a build setting variable and cannot be resolved from ${pbxprojPath}`,
-    );
-  }
+  const projectListId = getProjectConfigListId(content);
+  const projectConfig = projectListId
+    ? getConfigurations(content, projectListId, pbxprojPath).find(
+        (c) => c.name === configuration,
+      )
+    : undefined;
 
-  return appId;
+  return {
+    target: target.name,
+    configuration,
+    pbxprojPath,
+    get: (key) =>
+      getEntry(targetConfig.block, key) ??
+      (projectConfig ? getEntry(projectConfig.block, key) : undefined),
+  };
 }
 
 /**
- * Update iOS project.pbxproj with new version name and version code.
+ * Value of a build setting that must be present and literal.
+ */
+function requireSetting(config: AppConfiguration, key: string): string {
+  const value = config.get(key);
+  const where = `build configuration "${config.configuration}" of target "${config.target}"`;
+
+  if (value === undefined) {
+    throw new Error(
+      `No ${key} in ${where} in ${config.pbxprojPath}.\n` +
+        `Only settings in project.pbxproj are read; xcconfig files are not resolved.`,
+    );
+  }
+  if (/\$[({]/.test(value)) {
+    throw new Error(
+      `${key} "${value}" in ${where} references a build setting variable and cannot be resolved from ${config.pbxprojPath}`,
+    );
+  }
+
+  return value;
+}
+
+/**
+ * Read MARKETING_VERSION (version name) and CURRENT_PROJECT_VERSION (version
+ * code) of the application target's build configuration with the given
+ * name, as written.
+ */
+export function getIOSVersions(
+  projectRoot: string,
+  explicitPbxprojPath?: string,
+  configuration = 'Release',
+): { versionName: string; versionCode: string } {
+  const config = readAppConfiguration(
+    projectRoot,
+    explicitPbxprojPath,
+    configuration,
+  );
+  return {
+    versionName: requireSetting(config, 'MARKETING_VERSION'),
+    versionCode: requireSetting(config, 'CURRENT_PROJECT_VERSION'),
+  };
+}
+
+/**
+ * Read PRODUCT_BUNDLE_IDENTIFIER of the application target's build
+ * configuration with the given name.
+ */
+export function getIOSAppId(
+  projectRoot: string,
+  explicitPbxprojPath?: string,
+  configuration = 'Release',
+): string {
+  const config = readAppConfiguration(
+    projectRoot,
+    explicitPbxprojPath,
+    configuration,
+  );
+  return requireSetting(config, 'PRODUCT_BUNDLE_IDENTIFIER');
+}
+
+/**
+ * Update iOS project.pbxproj with new version name and version code. Every
+ * MARKETING_VERSION and CURRENT_PROJECT_VERSION in the file is replaced, so
+ * app, test and extension targets stay in step as Xcode requires.
  * Returns the path of the file, or null when no project.pbxproj was found.
+ * Throws when the file has neither setting.
  */
 export function updateIOSVersion(
   projectRoot: string,
@@ -220,32 +303,34 @@ export function updateIOSVersion(
 
   // Update MARKETING_VERSION (corresponds to CFBundleShortVersionString - version name)
   const marketingVersionRegex = /(MARKETING_VERSION\s*=\s*)([^;]+)(;)/g;
-  if (marketingVersionRegex.test(content)) {
-    const newContent = content.replace(
-      marketingVersionRegex,
-      `$1${versionName}$3`,
-    );
-    if (newContent !== content) {
-      content = newContent;
-      modified = true;
-      if (verbose) console.log(`Updated MARKETING_VERSION to ${versionName}`);
-    }
+  if (!marketingVersionRegex.test(content)) {
+    throw new Error(`No MARKETING_VERSION found in ${pbxprojPath}`);
+  }
+  const withVersionName = content.replace(
+    marketingVersionRegex,
+    `$1${versionName}$3`,
+  );
+  if (withVersionName !== content) {
+    content = withVersionName;
+    modified = true;
+    if (verbose) console.log(`Updated MARKETING_VERSION to ${versionName}`);
   }
 
   // Update CURRENT_PROJECT_VERSION (corresponds to CFBundleVersion - version code)
   const currentProjectVersionRegex =
     /(CURRENT_PROJECT_VERSION\s*=\s*)([^;]+)(;)/g;
-  if (currentProjectVersionRegex.test(content)) {
-    const newContent = content.replace(
-      currentProjectVersionRegex,
-      `$1${versionCode}$3`,
-    );
-    if (newContent !== content) {
-      content = newContent;
-      modified = true;
-      if (verbose)
-        console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
-    }
+  if (!currentProjectVersionRegex.test(content)) {
+    throw new Error(`No CURRENT_PROJECT_VERSION found in ${pbxprojPath}`);
+  }
+  const withVersionCode = content.replace(
+    currentProjectVersionRegex,
+    `$1${versionCode}$3`,
+  );
+  if (withVersionCode !== content) {
+    content = withVersionCode;
+    modified = true;
+    if (verbose)
+      console.log(`Updated CURRENT_PROJECT_VERSION to ${versionCode}`);
   }
 
   if (modified) {

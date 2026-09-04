@@ -45,6 +45,15 @@ describe('updateAndroidVersion', () => {
     ).toBeNull();
   });
 
+  it('throws when build.gradle has no version settings', () => {
+    project = new TestProject({ ios: false });
+    fs.writeFileSync(project.gradlePath(), 'android {\n}\n');
+
+    expect(() =>
+      updateAndroidVersion(project.root, '1.0.0', 10000, false),
+    ).toThrow('No versionName found');
+  });
+
   it('handles single-quoted versionName', () => {
     project = new TestProject({
       android: { versionName: '1.0.0', versionCode: 1, quote: "'" },

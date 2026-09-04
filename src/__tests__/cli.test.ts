@@ -141,8 +141,8 @@ describe('cli', () => {
     const ios = [
       {
         name: 'Debug',
-        version: '3.4.5',
-        buildNumber: '30405',
+        version: '0.0.1',
+        buildNumber: '1',
         bundleId: 'com.example.debug',
       },
       {
@@ -186,14 +186,23 @@ describe('cli', () => {
     it('selects the iOS build configuration with --configuration', () => {
       project = new TestProject({ android: false, ios });
 
-      const result = run(
+      const appId = run(
         project.root,
         '--print-app-id',
         'ios',
         '--configuration',
         'Debug',
       );
-      expect(result.stdout).toBe('com.example.debug\n');
+      expect(appId.stdout).toBe('com.example.debug\n');
+
+      const versionCode = run(
+        project.root,
+        '--print-version-code',
+        'ios',
+        '--configuration',
+        'Debug',
+      );
+      expect(versionCode.stdout).toBe('1\n');
     });
 
     it('prints all values with --print', () => {
@@ -310,10 +319,10 @@ describe('cli', () => {
       );
     });
 
-    it('rejects --configuration outside iOS app id reads', () => {
+    it('rejects --configuration outside iOS reads', () => {
       expectError(
         ['--print-app-id', 'android', '--configuration', 'Release'],
-        'Error: --configuration can only be used with --print-app-id, --print-env or --print for ios\n',
+        'Error: --configuration can only be used when printing ios values\n',
       );
     });
 

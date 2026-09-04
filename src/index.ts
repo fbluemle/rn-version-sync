@@ -139,7 +139,7 @@ export function syncVersions(
 export interface ReadOptions {
   gradlePath?: string;
   pbxprojPath?: string;
-  /** Xcode build configuration for the iOS app id (default: Release) */
+  /** Xcode build configuration to read the iOS values from (default: Release) */
   configuration?: string;
 }
 
@@ -166,7 +166,7 @@ function readVersions(
 ): Omit<NativeValues, 'appId'> {
   return platform === 'android'
     ? getAndroidVersions(projectRoot, options.gradlePath)
-    : getIOSVersions(projectRoot, options.pbxprojPath);
+    : getIOSVersions(projectRoot, options.pbxprojPath, options.configuration);
 }
 
 /**

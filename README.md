@@ -30,7 +30,9 @@ Pre-release and build metadata (`1.2.3-beta.1`) are ignored when calculating
 the code; the version name is written as is. Only the version lines are
 modified, everything else in the files stays untouched. On iOS, every
 `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` in the project file is
-updated.
+updated, so app, test and extension targets stay in step as Xcode requires.
+A native file without these settings is an error rather than a silent
+no-op.
 
 ## Usage
 
@@ -160,21 +162,21 @@ steps:
 
 ### How values are read
 
-- Version name and code are the first `versionName` / `versionCode` (Android)
-  or `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` (iOS) in the file.
-  Projects with flavors or per-configuration overrides may need to read them
-  some other way.
-- The Android app id is the `applicationId` literal in `build.gradle`. Build
-  type `applicationIdSuffix` values are not applied. If flavors declare their
+- Android version name and code are the first `versionName` / `versionCode`
+  in `build.gradle`; projects with flavor overrides may need to read them
+  some other way. The app id is the `applicationId` literal. Build type
+  `applicationIdSuffix` values are not applied, and if flavors declare their
   own `applicationId`, the command fails instead of guessing.
-- The iOS app id is `PRODUCT_BUNDLE_IDENTIFIER` of the application target's
-  build configuration named by `--configuration` (default `Release`). The
+- All iOS values (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION` and
+  `PRODUCT_BUNDLE_IDENTIFIER`) come from the application target's build
+  configuration named by `--configuration` (default `Release`). The
   configuration is located through the target's configuration list, not by
-  position in the file, so test and extension targets do not interfere. The
-  command fails if the project has several application targets, if the
-  configuration does not exist, or if the value is a build setting variable
-  such as `$(PRODUCT_NAME:rfc1034identifier)`. Only `project.pbxproj` is
-  read; xcconfig files are not resolved.
+  position in the file, so test and extension targets do not interfere. A
+  setting missing from the target's configuration falls back to the
+  project-level configuration of the same name, as in Xcode. The command
+  fails if the project has several application targets, if the configuration
+  does not exist, or if a value is a build setting variable such as
+  `$(PRODUCT_NAME:rfc1034identifier)`. xcconfig files are not resolved.
 
 ## Programmatic use
 

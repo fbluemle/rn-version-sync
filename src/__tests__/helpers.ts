@@ -14,8 +14,10 @@ export interface GradleConfig {
 
 export interface PbxprojBuildConfig {
   name: string;
-  version?: string;
-  buildNumber?: string;
+  /** MARKETING_VERSION; null omits the setting */
+  version?: string | null;
+  /** CURRENT_PROJECT_VERSION; null omits the setting */
+  buildNumber?: string | null;
   /** Written verbatim as PRODUCT_BUNDLE_IDENTIFIER; omitted when undefined */
   bundleId?: string;
 }
@@ -33,6 +35,8 @@ export interface ProjectOptions {
   ios?: PbxprojBuildConfig[] | false;
   /** Full target layout; takes precedence over `ios` */
   iosTargets?: PbxprojTarget[];
+  /** Project-level build configurations; default to the targets' names without version settings */
+  iosProjectConfigs?: PbxprojBuildConfig[];
 }
 
 export const APPLICATION_PRODUCT_TYPE = 'com.apple.product-type.application';
@@ -80,7 +84,7 @@ export class TestProject {
       fs.mkdirSync(xcodeprojDir, { recursive: true });
       fs.writeFileSync(
         path.join(xcodeprojDir, 'project.pbxproj'),
-        buildPbxproj(targets),
+        buildPbxproj(targets, options.iosProjectConfigs),
       );
     }
   }
@@ -146,36 +150,39 @@ export function buildGradle(cfg: GradleConfig = {}): string {
 /**
  * Emit the pbxproj sections the tool reads, laid out like Xcode writes them.
  * Objects appear in the order of the given targets, so a target listed first
- * has its build configurations sorted before the application target's.
+ * has its build configurations sorted before the application target's. The
+ * PBXProject object gets configurations of the same names without version
+ * settings unless projectConfigs is given.
  */
-export function buildPbxproj(targets: PbxprojTarget[]): string {
+export function buildPbxproj(
+  targets: PbxprojTarget[],
+  projectConfigs?: PbxprojBuildConfig[],
+): string {
   let counter = 0;
   const nextId = () => (++counter).toString(16).toUpperCase().padStart(24, '0');
 
   const targetSections: string[] = [];
+  const projectSections: string[] = [];
   const configSections: string[] = [];
   const listSections: string[] = [];
 
-  for (const target of targets) {
-    const targetId = nextId();
+  /** Emit the configurations and list of one owner; returns the list reference */
+  const addConfigList = (
+    owner: string,
+    configs: PbxprojBuildConfig[],
+  ): string => {
     const listId = nextId();
-    const configs = target.configs.map((config) => ({ config, id: nextId() }));
-    const listComment = `/* Build configuration list for PBXNativeTarget "${target.name}" */`;
+    const entries = configs.map((config) => ({ config, id: nextId() }));
+    const listComment = `/* Build configuration list for ${owner} */`;
 
-    targetSections.push(`\t\t${targetId} /* ${target.name} */ = {
-\t\t\tisa = PBXNativeTarget;
-\t\t\tbuildConfigurationList = ${listId} ${listComment};
-\t\t\tbuildPhases = (
-\t\t\t);
-\t\t\tname = ${target.name};
-\t\t\tproductName = ${target.name};
-\t\t\tproductType = "${target.productType ?? APPLICATION_PRODUCT_TYPE}";
-\t\t};`);
-
-    for (const { config, id } of configs) {
+    for (const { config, id } of entries) {
       const settings = [
-        `\t\t\t\tCURRENT_PROJECT_VERSION = ${config.buildNumber ?? '1'};`,
-        `\t\t\t\tMARKETING_VERSION = ${config.version ?? '1.0.0'};`,
+        ...(config.buildNumber !== null
+          ? [`\t\t\t\tCURRENT_PROJECT_VERSION = ${config.buildNumber ?? '1'};`]
+          : []),
+        ...(config.version !== null
+          ? [`\t\t\t\tMARKETING_VERSION = ${config.version ?? '1.0.0'};`]
+          : []),
         ...(config.bundleId !== undefined
           ? [`\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = ${config.bundleId};`]
           : []),
@@ -193,12 +200,57 @@ ${settings.join('\n')}
     listSections.push(`\t\t${listId} ${listComment} = {
 \t\t\tisa = XCConfigurationList;
 \t\t\tbuildConfigurations = (
-${configs.map(({ config, id }) => `\t\t\t\t${id} /* ${config.name} */,`).join('\n')}
+${entries.map(({ config, id }) => `\t\t\t\t${id} /* ${config.name} */,`).join('\n')}
 \t\t\t);
 \t\t\tdefaultConfigurationIsVisible = 0;
 \t\t\tdefaultConfigurationName = Release;
 \t\t};`);
+
+    return `${listId} ${listComment}`;
+  };
+
+  const targetIds: string[] = [];
+  for (const target of targets) {
+    const targetId = nextId();
+    targetIds.push(targetId);
+    const listRef = addConfigList(
+      `PBXNativeTarget "${target.name}"`,
+      target.configs,
+    );
+
+    targetSections.push(`\t\t${targetId} /* ${target.name} */ = {
+\t\t\tisa = PBXNativeTarget;
+\t\t\tbuildConfigurationList = ${listRef};
+\t\t\tbuildPhases = (
+\t\t\t);
+\t\t\tname = ${target.name};
+\t\t\tproductName = ${target.name};
+\t\t\tproductType = "${target.productType ?? APPLICATION_PRODUCT_TYPE}";
+\t\t};`);
   }
+
+  const configNames = new Set(
+    targets.flatMap((t) => t.configs.map((c) => c.name)),
+  );
+  const project =
+    projectConfigs ??
+    [...configNames].map((name) => ({
+      name,
+      version: null,
+      buildNumber: null,
+    }));
+  const projectId = nextId();
+  const projectListRef = addConfigList('PBXProject "TestApp"', project);
+  projectSections.push(`\t\t${projectId} /* Project object */ = {
+\t\t\tisa = PBXProject;
+\t\t\tattributes = {
+\t\t\t\tLastUpgradeCheck = 1210;
+\t\t\t};
+\t\t\tbuildConfigurationList = ${projectListRef};
+\t\t\ttargets = (
+${targetIds.map((id) => `\t\t\t\t${id},`).join('\n')}
+\t\t\t);
+\t\t};`);
 
   return `// !$*UTF8*$!
 {
@@ -208,6 +260,10 @@ ${configs.map(({ config, id }) => `\t\t\t\t${id} /* ${config.name} */,`).join('\
 /* Begin PBXNativeTarget section */
 ${targetSections.join('\n')}
 /* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+${projectSections.join('\n')}
+/* End PBXProject section */
 
 /* Begin XCBuildConfiguration section */
 ${configSections.join('\n')}
