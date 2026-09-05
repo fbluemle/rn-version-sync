@@ -37,6 +37,8 @@ export interface ProjectOptions {
   iosTargets?: PbxprojTarget[];
   /** Project-level build configurations; default to the targets' names without version settings */
   iosProjectConfigs?: PbxprojBuildConfig[];
+  /** Written as the "rn-version-sync" key of package.json, even when invalid */
+  config?: unknown;
 }
 
 export const APPLICATION_PRODUCT_TYPE = 'com.apple.product-type.application';
@@ -70,7 +72,13 @@ export class TestProject {
     fs.writeFileSync(
       path.join(this.root, 'package.json'),
       JSON.stringify(
-        { name: 'test-app', version: options.version ?? defaults.version },
+        {
+          name: 'test-app',
+          version: options.version ?? defaults.version,
+          ...(options.config !== undefined && {
+            'rn-version-sync': options.config,
+          }),
+        },
         null,
         2,
       ),

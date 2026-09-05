@@ -4,6 +4,7 @@ import {
   locateBuildGradle,
   updateAndroidVersion,
 } from './android';
+import { type ProjectConfig, loadConfig } from './config';
 import {
   getIOSAppId,
   getIOSVersions,
@@ -19,19 +20,31 @@ import {
 
 export type Platform = 'android' | 'ios';
 
-export interface ReadOptions {
-  gradlePath?: string;
-  pbxprojPath?: string;
-  /** Xcode build configuration to read the iOS values from (default: Release) */
-  configuration?: string;
-}
+export type ReadOptions = Pick<
+  ProjectConfig,
+  'gradlePath' | 'pbxprojPath' | 'configuration'
+>;
 
-export interface SyncOptions extends ReadOptions {
+/**
+ * Project configuration plus the per-invocation overrides. Options left
+ * undefined are filled in from the "rn-version-sync" key of package.json.
+ */
+export interface SyncOptions extends ProjectConfig {
   versionName?: string;
   versionCode?: number;
-  reserveBuilds?: number;
-  skipAndroid?: boolean;
-  skipIos?: boolean;
+}
+
+/**
+ * Fill options left undefined with the project configuration from
+ * package.json, so an explicit option takes precedence over the configured
+ * value.
+ */
+function withConfig<T extends ReadOptions>(projectRoot: string, options: T): T {
+  const merged: Record<string, unknown> = { ...options };
+  for (const [key, value] of Object.entries(loadConfig(projectRoot))) {
+    merged[key] ??= value;
+  }
+  return merged as T;
 }
 
 export interface ResolvedVersions {
@@ -45,6 +58,13 @@ export interface ResolvedVersions {
 export function resolveVersions(
   projectRoot: string,
   options: SyncOptions = {},
+): ResolvedVersions {
+  return resolveTarget(projectRoot, withConfig(projectRoot, options));
+}
+
+function resolveTarget(
+  projectRoot: string,
+  options: SyncOptions,
 ): ResolvedVersions {
   const manualVersionCode = options.versionCode;
   if (
@@ -100,6 +120,17 @@ function readVersions(
     : getIOSVersions(projectRoot, options.pbxprojPath, options.configuration);
 }
 
+function readValues(
+  projectRoot: string,
+  platform: Platform,
+  options: ReadOptions,
+): NativeValues {
+  return {
+    appId: readAppId(projectRoot, platform, options),
+    ...readVersions(projectRoot, platform, options),
+  };
+}
+
 /**
  * Read app id, version name and version code of one platform as written in
  * its native build file.
@@ -109,10 +140,7 @@ export function readNativeValues(
   platform: Platform,
   options: ReadOptions = {},
 ): NativeValues {
-  return {
-    appId: readAppId(projectRoot, platform, options),
-    ...readVersions(projectRoot, platform, options),
-  };
+  return readValues(projectRoot, platform, withConfig(projectRoot, options));
 }
 
 export interface PlatformStatus extends NativeValues {
@@ -195,7 +223,7 @@ function readPlatformStatus(
   target: ResolvedVersions,
   configuration?: string,
 ): PlatformStatus {
-  const values = readNativeValues(
+  const values = readValues(
     projectRoot,
     file.platform,
     file.platform === 'android'
@@ -221,18 +249,19 @@ export function checkVersions(
   projectRoot: string,
   options: SyncOptions = {},
 ): VersionStatus {
+  const opts = withConfig(projectRoot, options);
   const { name, version } = getPackageInfo(projectRoot);
-  const target = resolveVersions(projectRoot, options);
-  const { files, missing } = locateNativeFiles(projectRoot, options);
+  const target = resolveTarget(projectRoot, opts);
+  const { files, missing } = locateNativeFiles(projectRoot, opts);
 
   return {
     packageName: name,
     packageVersion: version,
     target,
     overridden:
-      options.versionName !== undefined || options.versionCode !== undefined,
+      opts.versionName !== undefined || opts.versionCode !== undefined,
     platforms: files.map((file) =>
-      readPlatformStatus(projectRoot, file, target, options.configuration),
+      readPlatformStatus(projectRoot, file, target, opts.configuration),
     ),
     missing,
   };
@@ -288,6 +317,7 @@ export function formatTemplate(
   platform: Platform,
   options: ReadOptions = {},
 ): string {
+  const opts = withConfig(projectRoot, options);
   let appId: string | undefined;
   let versions: Omit<NativeValues, 'appId'> | undefined;
 
@@ -299,10 +329,10 @@ export function formatTemplate(
       );
     }
     if (name === 'appId') {
-      appId ??= readAppId(projectRoot, platform, options);
+      appId ??= readAppId(projectRoot, platform, opts);
       return appId;
     }
-    versions ??= readVersions(projectRoot, platform, options);
+    versions ??= readVersions(projectRoot, platform, opts);
     return versions[name];
   });
 }
@@ -339,5 +369,6 @@ export {
   getAndroidVersions,
   updateAndroidVersion,
 } from './android';
+export { type ProjectConfig, loadConfig } from './config';
 export { getIOSAppId, getIOSVersions, updateIOSVersion } from './ios';
 export { getPackageVersion } from './utils';

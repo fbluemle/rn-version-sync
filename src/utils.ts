@@ -10,6 +10,8 @@ export interface SemverComponents {
 export interface PackageJson {
   name?: string;
   version?: string;
+  /** Project configuration, validated by loadConfig */
+  'rn-version-sync'?: unknown;
 }
 
 function parsePackageJson(packagePath: string): PackageJson {
@@ -24,15 +26,19 @@ function parsePackageJson(packagePath: string): PackageJson {
 }
 
 /**
+ * Read package.json as written; empty when the file is missing
+ */
+export function readPackageJson(projectRoot: string): PackageJson {
+  const packagePath = path.join(projectRoot, 'package.json');
+  return fs.existsSync(packagePath) ? parsePackageJson(packagePath) : {};
+}
+
+/**
  * Read the "name" and "version" fields of package.json as written; a field
  * is undefined when it or the file is missing.
  */
 export function getPackageInfo(projectRoot: string): PackageJson {
-  const packagePath = path.join(projectRoot, 'package.json');
-  if (!fs.existsSync(packagePath)) {
-    return {};
-  }
-  const { name, version } = parsePackageJson(packagePath);
+  const { name, version } = readPackageJson(projectRoot);
   return { name, version };
 }
 

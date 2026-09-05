@@ -1,3 +1,5 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   checkVersions,
@@ -7,7 +9,7 @@ import {
   resolveVersions,
   syncVersions,
 } from '../index';
-import { TestProject } from './helpers';
+import { TestProject, buildGradle } from './helpers';
 
 describe('syncVersions', () => {
   let project: TestProject;
@@ -37,6 +39,20 @@ describe('syncVersions', () => {
 
     const gradle = project.readGradle();
     expect(gradle).toContain('versionCode 999');
+  });
+
+  it('writes the version code reserved in package.json', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      config: { reserveBuilds: 100 },
+    });
+
+    syncVersions(project.root);
+
+    expect(project.readGradle()).toContain('versionCode 1020300');
+    expect(project.readPbxproj()).toContain(
+      'CURRENT_PROJECT_VERSION = 1020300;',
+    );
   });
 
   it('throws on versionCode exceeding 32-bit int max', () => {
@@ -278,6 +294,38 @@ describe('checkVersions', () => {
     });
   });
 
+  it('applies the configuration in package.json', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      config: { reserveBuilds: 100, skipIos: true },
+      android: { versionName: '1.2.3', versionCode: 1020300 },
+      ios: false,
+    });
+
+    const status = checkVersions(project.root);
+
+    expect(status.target.versionCode).toBe(1020300);
+    expect(status.platforms.map((p) => p.platform)).toEqual(['android']);
+    expect(status.platforms[0].inSync).toBe(true);
+  });
+
+  it('prefers explicit options over the configuration', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      config: { reserveBuilds: 100, skipIos: true },
+      android: false,
+    });
+
+    const status = checkVersions(project.root, {
+      reserveBuilds: 10,
+      skipAndroid: true,
+      skipIos: false,
+    });
+
+    expect(status.target.versionCode).toBe(102030);
+    expect(status.platforms.map((p) => p.platform)).toEqual(['ios']);
+  });
+
   it('reads the iOS values of the requested configuration', () => {
     project = new TestProject({
       version: '1.2.3',
@@ -363,6 +411,24 @@ describe('resolveVersions', () => {
 
     const result = resolveVersions(project.root, { reserveBuilds: 100 });
     expect(result).toEqual({ versionName: '1.2.3', versionCode: 1020300 });
+  });
+
+  it('applies reserveBuilds from package.json unless given', () => {
+    project = new TestProject({
+      version: '1.2.3',
+      config: { reserveBuilds: 100 },
+      android: false,
+      ios: false,
+    });
+
+    expect(resolveVersions(project.root)).toEqual({
+      versionName: '1.2.3',
+      versionCode: 1020300,
+    });
+    expect(resolveVersions(project.root, { reserveBuilds: 10 })).toEqual({
+      versionName: '1.2.3',
+      versionCode: 102030,
+    });
   });
 
   it('ignores reserveBuilds when versionCode is manually set', () => {
@@ -496,6 +562,26 @@ describe('readNativeValues', () => {
     expect(android.appId).toBe('com.testapp');
     expect(ios.appId).toBe('com.testapp');
   });
+
+  it('uses the paths and configuration set in package.json', () => {
+    project = new TestProject({
+      config: { gradlePath: 'other/build.gradle', configuration: 'Debug' },
+      ios: [
+        { name: 'Debug', bundleId: 'com.testapp.debug' },
+        { name: 'Release', bundleId: 'com.testapp' },
+      ],
+    });
+    fs.mkdirSync(path.join(project.root, 'other'));
+    fs.writeFileSync(
+      path.join(project.root, 'other', 'build.gradle'),
+      buildGradle({ applicationId: 'com.other' }),
+    );
+
+    expect(readNativeValues(project.root, 'android').appId).toBe('com.other');
+    expect(readNativeValues(project.root, 'ios').appId).toBe(
+      'com.testapp.debug',
+    );
+  });
 });
 
 describe('formatEnv', () => {
@@ -572,6 +658,21 @@ describe('formatTemplate', () => {
       configuration: 'Debug',
     });
     expect(debug).toBe('com.testapp.debug');
+  });
+
+  it('applies the configuration in package.json', () => {
+    project = new TestProject({
+      android: false,
+      config: { configuration: 'Debug' },
+      ios: [
+        { name: 'Debug', bundleId: 'com.testapp.debug' },
+        { name: 'Release', bundleId: 'com.testapp' },
+      ],
+    });
+
+    expect(formatTemplate('{appId}', project.root, 'ios')).toBe(
+      'com.testapp.debug',
+    );
   });
 
   it('reads only the referenced values', () => {

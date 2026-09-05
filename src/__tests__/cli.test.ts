@@ -171,6 +171,79 @@ describe('cli', () => {
       );
     });
 
+    it('applies the configuration in package.json', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        config: { reserveBuilds: 100, skipIos: true },
+        android: { versionName: '1.2.3', versionCode: 1020300 },
+        ios: false,
+      });
+
+      expect(run(project.root)).toEqual({
+        status: 0,
+        stdout: [
+          'PLATFORM  APP ID       VERSION          STATUS',
+          JS_ROW,
+          'android   com.testapp  1.2.3 (1020300)  ok',
+          '',
+        ].join('\n'),
+        stderr: '',
+      });
+    });
+
+    it('prefers command line options over the configuration', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        config: { reserveBuilds: 100, skipIos: true },
+        ios: false,
+      });
+
+      const result = run(project.root, '--write', '--reserve-builds', '10');
+      expect(result.stdout).toContain(
+        'android   com.testapp  1.2.3 (102030)  updated\n',
+      );
+    });
+
+    it('labels the iOS row with the configuration from package.json', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        config: { configuration: 'Debug' },
+        android: false,
+        ios: [
+          {
+            name: 'Debug',
+            version: '1.2.3',
+            buildNumber: '10203',
+            bundleId: 'com.testapp',
+          },
+          {
+            name: 'Release',
+            version: '1.0.0',
+            buildNumber: '1',
+            bundleId: 'com.testapp',
+          },
+        ],
+      });
+
+      expect(run(project.root).stdout).toContain(
+        'ios (Debug)  com.testapp  1.2.3 (10203)  ok\n',
+      );
+    });
+
+    it('rejects an invalid configuration', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        config: { reserveBuild: 100 },
+      });
+
+      expect(run(project.root)).toEqual({
+        status: 1,
+        stdout: '',
+        stderr:
+          'Error: Invalid "rn-version-sync" configuration in package.json: unknown setting "reserveBuild" (available: reserveBuilds, gradlePath, pbxprojPath, configuration, skipAndroid, skipIos)\n',
+      });
+    });
+
     it('uses --project-dir instead of the working directory', () => {
       project = new TestProject({ version: '1.2.3' });
       const other = new TestProject({ version: '9.9.9' });
@@ -462,6 +535,9 @@ describe('cli', () => {
       expect(result.stdout).toContain('Usage: rn-version-sync [options]');
       expect(result.stdout).toContain('--write');
       expect(result.stdout).toContain('--reserve-builds <n>');
+      expect(result.stdout).toContain(
+        '"rn-version-sync": { "reserveBuilds": 100 }',
+      );
     });
   });
 });
