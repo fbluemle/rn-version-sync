@@ -23,8 +23,6 @@ function run(cwd: string, ...args: string[]) {
   };
 }
 
-const SUCCESS = '✓ Version sync completed successfully\n';
-
 describe('cli', () => {
   let project: TestProject;
 
@@ -32,34 +30,75 @@ describe('cli', () => {
     project?.cleanup();
   });
 
-  describe('sync', () => {
-    it('syncs both platforms and reports success', () => {
+  const HEADER = 'PLATFORM  APP ID       VERSION        STATUS';
+  const JS_ROW = 'js        test-app     1.2.3';
+
+  describe('check', () => {
+    it('reports outdated platforms and exits 1', () => {
       project = new TestProject({ version: '1.2.3' });
 
       expect(run(project.root)).toEqual({
-        status: 0,
-        stdout: SUCCESS,
-        stderr: '',
+        status: 1,
+        stdout: [
+          'PLATFORM  APP ID       VERSION    STATUS',
+          JS_ROW,
+          'android   com.testapp  1.0.0 (1)  outdated',
+          'ios       com.testapp  1.0.0 (1)  outdated',
+          '',
+        ].join('\n'),
+        stderr: 'Run with --write to update the native files.\n',
       });
-      expect(project.readGradle()).toContain('versionCode 10203');
-      expect(project.readPbxproj()).toContain('MARKETING_VERSION = 1.2.3;');
+      expect(project.readGradle()).toContain('versionCode 1');
     });
 
-    it('warns about a missing platform and exits 0', () => {
-      project = new TestProject({ version: '1.2.3', ios: false });
-
-      expect(run(project.root)).toEqual({
-        status: 0,
-        stdout: SUCCESS,
-        stderr:
-          'Warning: ios/<Project>.xcodeproj/project.pbxproj not found, skipping iOS. Pass --skip-ios to silence this warning.\n',
+    it('reports platforms in sync and exits 0', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        android: { versionName: '1.2.3', versionCode: 10203 },
+        ios: [
+          {
+            name: 'Release',
+            version: '1.2.3',
+            buildNumber: '10203',
+            bundleId: 'com.testapp',
+          },
+        ],
       });
+
+      const result = run(project.root);
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain(
+        'android   com.testapp  1.2.3 (10203)  ok\n',
+      );
+      expect(result.stdout).toContain(
+        'ios       com.testapp  1.2.3 (10203)  ok\n',
+      );
     });
 
-    it('does not warn about a skipped platform', () => {
-      project = new TestProject({ version: '1.2.3', ios: false });
+    it('lists a missing platform as not found and exits 0', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        android: { versionName: '1.2.3', versionCode: 10203 },
+        ios: false,
+      });
 
-      expect(run(project.root, '--skip-ios').stderr).toBe('');
+      const result = run(project.root);
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain(
+        `ios${' '.repeat(35)}not found, pass --skip-ios to ignore\n`,
+      );
+    });
+
+    it('omits a skipped platform', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        android: { versionName: '1.2.3', versionCode: 10203 },
+        ios: false,
+      });
+
+      expect(run(project.root, '--skip-ios').stdout).not.toContain('ios');
     });
 
     it('fails when no native project files are found', () => {
@@ -81,37 +120,55 @@ describe('cli', () => {
       });
     });
 
-    it('prints the resolved values with --dry-run without writing', () => {
-      project = new TestProject({ version: '1.2.3' });
+    it('applies --reserve-builds without marking the js row', () => {
+      project = new TestProject({ version: '1.2.3', ios: false });
 
-      expect(run(project.root, '--dry-run')).toEqual({
-        status: 0,
-        stdout: 'versionName: 1.2.3\nversionCode: 10203\n',
-        stderr: '',
-      });
-      expect(project.readGradle()).toContain('versionCode 1');
+      const result = run(project.root, '--write', '--reserve-builds', '100');
+      expect(result.stdout).toContain(`${JS_ROW}\n`);
+      expect(result.stdout).toContain(
+        'android   com.testapp  1.2.3 (1020300)  updated\n',
+      );
+      expect(result.stdout).not.toContain('overridden');
     });
 
-    it('applies --version-name and --reserve-builds', () => {
+    it('shows an overridden target in the js row', () => {
       project = new TestProject({ version: '1.2.3' });
 
       const result = run(
         project.root,
-        '--dry-run',
         '--version-name',
         '2.0.0',
-        '--reserve-builds',
-        '100',
+        '--version-code',
+        '7',
       );
-      expect(result.stdout).toBe('versionName: 2.0.0\nversionCode: 2000000\n');
+      expect(result.stdout).toContain(
+        'js        test-app     1.2.3      overridden 2.0.0 (7)\n',
+      );
     });
 
-    it('applies --version-code as given', () => {
-      project = new TestProject({ version: '1.2.3' });
+    it('labels the iOS row with --configuration', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        android: false,
+        ios: [
+          {
+            name: 'Debug',
+            version: '1.2.3',
+            buildNumber: '10203',
+            bundleId: 'com.testapp',
+          },
+          {
+            name: 'Release',
+            version: '1.0.0',
+            buildNumber: '1',
+            bundleId: 'com.testapp',
+          },
+        ],
+      });
 
-      expect(
-        run(project.root, '--dry-run', '--version-code', '42').stdout,
-      ).toBe('versionName: 1.2.3\nversionCode: 42\n');
+      expect(run(project.root, '--configuration', 'Debug').stdout).toContain(
+        'ios (Debug)  com.testapp  1.2.3 (10203)  ok\n',
+      );
     });
 
     it('uses --project-dir instead of the working directory', () => {
@@ -119,16 +176,58 @@ describe('cli', () => {
       const other = new TestProject({ version: '9.9.9' });
 
       try {
-        const result = run(
-          other.root,
-          '--project-dir',
-          project.root,
-          '--dry-run',
-        );
-        expect(result.stdout).toBe('versionName: 1.2.3\nversionCode: 10203\n');
+        const result = run(other.root, '--project-dir', project.root);
+        expect(result.stdout).toContain(`${JS_ROW}\n`);
       } finally {
         other.cleanup();
       }
+    });
+  });
+
+  describe('write', () => {
+    it('updates the native files and reports what changed', () => {
+      project = new TestProject({ version: '1.2.3' });
+
+      expect(run(project.root, '--write')).toEqual({
+        status: 0,
+        stdout: [
+          HEADER,
+          JS_ROW,
+          'android   com.testapp  1.2.3 (10203)  updated',
+          'ios       com.testapp  1.2.3 (10203)  updated',
+          '',
+        ].join('\n'),
+        stderr: '',
+      });
+      expect(project.readGradle()).toContain('versionCode 10203');
+      expect(project.readPbxproj()).toContain('MARKETING_VERSION = 1.2.3;');
+      expect(run(project.root).status).toBe(0);
+    });
+
+    it('reports platforms that were already in sync as unchanged', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        android: { versionName: '1.2.3', versionCode: 10203 },
+      });
+
+      const { stdout } = run(project.root, '--write');
+      expect(stdout).toContain(
+        'android   com.testapp  1.2.3 (10203)  unchanged\n',
+      );
+      expect(stdout).toContain(
+        'ios       com.testapp  1.2.3 (10203)  updated\n',
+      );
+    });
+
+    it('lists a missing platform as not found', () => {
+      project = new TestProject({ version: '1.2.3', ios: false });
+
+      const result = run(project.root, '--write');
+      expect(result.status).toBe(0);
+      expect(result.stderr).toBe('');
+      expect(result.stdout).toContain(
+        `ios${' '.repeat(35)}not found, pass --skip-ios to ignore\n`,
+      );
     });
   });
 
@@ -293,21 +392,21 @@ describe('cli', () => {
 
     it('rejects a non-integer --version-code', () => {
       expectError(
-        ['--dry-run', '--version-code', '12abc'],
+        ['--version-code', '12abc'],
         "error: option '--version-code <code>' argument '12abc' is invalid. Not an integer.\n",
       );
     });
 
     it('rejects a fractional --reserve-builds', () => {
       expectError(
-        ['--dry-run', '--reserve-builds', '1.5'],
+        ['--reserve-builds', '1.5'],
         "error: option '--reserve-builds <n>' argument '1.5' is invalid. Not an integer.\n",
       );
     });
 
     it('rejects a non-positive --version-code', () => {
       expectError(
-        ['--dry-run', '--version-code', '0'],
+        ['--version-code', '0'],
         'Error: version-code must be a positive integer\n',
       );
     });
@@ -322,14 +421,14 @@ describe('cli', () => {
     it('rejects --configuration outside iOS reads', () => {
       expectError(
         ['--print-app-id', 'android', '--configuration', 'Release'],
-        'Error: --configuration can only be used when printing ios values\n',
+        'Error: --configuration does not apply to android\n',
       );
     });
 
-    it('rejects --dry-run combined with a print flag', () => {
+    it('rejects --write combined with a print flag', () => {
       expectError(
-        ['--dry-run', '--print', 'android'],
-        'Error: Only one of --print, --dry-run may be used at a time\n',
+        ['--write', '--print', 'android'],
+        'Error: Only one of --print, --write may be used at a time\n',
       );
     });
 
@@ -361,6 +460,7 @@ describe('cli', () => {
       const result = run(root, '--help');
       expect(result.status).toBe(0);
       expect(result.stdout).toContain('Usage: rn-version-sync [options]');
+      expect(result.stdout).toContain('--write');
       expect(result.stdout).toContain('--reserve-builds <n>');
     });
   });

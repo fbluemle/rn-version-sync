@@ -1,24 +1,35 @@
 import {
   getAndroidAppId,
   getAndroidVersions,
+  locateBuildGradle,
   updateAndroidVersion,
 } from './android';
-import { getIOSAppId, getIOSVersions, updateIOSVersion } from './ios';
+import {
+  getIOSAppId,
+  getIOSVersions,
+  locatePbxproj,
+  updateIOSVersion,
+} from './ios';
 import {
   MAX_VERSION_CODE,
   calculateVersionCode,
+  getPackageInfo,
   getPackageVersion,
 } from './utils';
 
 export type Platform = 'android' | 'ios';
 
-export interface SyncOptions {
-  verbose?: boolean;
+export interface ReadOptions {
+  gradlePath?: string;
+  pbxprojPath?: string;
+  /** Xcode build configuration to read the iOS values from (default: Release) */
+  configuration?: string;
+}
+
+export interface SyncOptions extends ReadOptions {
   versionName?: string;
   versionCode?: number;
   reserveBuilds?: number;
-  gradlePath?: string;
-  pbxprojPath?: string;
   skipAndroid?: boolean;
   skipIos?: boolean;
 }
@@ -63,86 +74,6 @@ export function resolveVersions(
   return { versionName, versionCode };
 }
 
-export interface SyncResult {
-  /** Path of the synced build.gradle; unset when skipped or not found */
-  android?: string;
-  /** Path of the synced project.pbxproj; unset when skipped or not found */
-  ios?: string;
-}
-
-/**
- * Write the resolved version name and code to the native files of the
- * platforms that are not skipped. A platform whose file cannot be found is
- * skipped with a warning; when no file was synced at all, an error is thrown.
- */
-export function syncVersions(
-  projectRoot: string,
-  options: SyncOptions = {},
-): SyncResult {
-  const { verbose = false } = options;
-  const { versionName, versionCode } = resolveVersions(projectRoot, options);
-
-  if (verbose) {
-    console.log(`Syncing version name: ${versionName}`);
-    console.log(`Using version code: ${versionCode}`);
-  }
-
-  const result: SyncResult = {};
-
-  if (!options.skipAndroid) {
-    const gradlePath = updateAndroidVersion(
-      projectRoot,
-      versionName,
-      versionCode,
-      verbose,
-      options.gradlePath,
-    );
-    if (gradlePath) {
-      result.android = gradlePath;
-    } else {
-      console.warn(
-        'Warning: android/app/build.gradle not found, skipping Android. Pass --skip-android to silence this warning.',
-      );
-    }
-  }
-
-  if (!options.skipIos) {
-    const pbxprojPath = updateIOSVersion(
-      projectRoot,
-      versionName,
-      versionCode.toString(),
-      verbose,
-      options.pbxprojPath,
-    );
-    if (pbxprojPath) {
-      result.ios = pbxprojPath;
-    } else {
-      console.warn(
-        'Warning: ios/<Project>.xcodeproj/project.pbxproj not found, skipping iOS. Pass --skip-ios to silence this warning.',
-      );
-    }
-  }
-
-  if (!result.android && !result.ios) {
-    throw new Error(
-      options.skipAndroid && options.skipIos
-        ? 'Nothing to sync: both platforms are skipped'
-        : `No native project files found in ${projectRoot}.\n` +
-            `Expected android/app/build.gradle or ios/<Project>.xcodeproj/project.pbxproj; ` +
-            `use --gradle-path or --pbxproj-path for other locations.`,
-    );
-  }
-
-  return result;
-}
-
-export interface ReadOptions {
-  gradlePath?: string;
-  pbxprojPath?: string;
-  /** Xcode build configuration to read the iOS values from (default: Release) */
-  configuration?: string;
-}
-
 export interface NativeValues {
   appId: string;
   versionName: string;
@@ -181,6 +112,160 @@ export function readNativeValues(
   return {
     appId: readAppId(projectRoot, platform, options),
     ...readVersions(projectRoot, platform, options),
+  };
+}
+
+export interface PlatformStatus extends NativeValues {
+  platform: Platform;
+  /** Native file the values were read from */
+  path: string;
+  /** Whether versionName and versionCode match the target */
+  inSync: boolean;
+}
+
+export interface VersionStatus {
+  /** The "name" field of package.json, if present */
+  packageName?: string;
+  /** The "version" field of package.json as written, if present */
+  packageVersion?: string;
+  /** Version name and code to compare against and write */
+  target: ResolvedVersions;
+  /** Whether versionName or versionCode replaced the package.json values */
+  overridden: boolean;
+  /** Platforms that are not skipped and whose native file was found */
+  platforms: PlatformStatus[];
+  /** Platforms that are not skipped but whose native file was not found */
+  missing: Platform[];
+}
+
+export interface SyncStatus extends VersionStatus {
+  platforms: (PlatformStatus & { updated: boolean })[];
+}
+
+interface NativeFile {
+  platform: Platform;
+  path: string;
+}
+
+/**
+ * Native files of the platforms that are not skipped, and the platforms
+ * whose file cannot be found. Throws when no file is left.
+ */
+function locateNativeFiles(
+  projectRoot: string,
+  options: SyncOptions,
+): { files: NativeFile[]; missing: Platform[] } {
+  const files: NativeFile[] = [];
+  const missing: Platform[] = [];
+
+  if (!options.skipAndroid) {
+    const path = locateBuildGradle(projectRoot, options.gradlePath);
+    if (path) {
+      files.push({ platform: 'android', path });
+    } else {
+      missing.push('android');
+    }
+  }
+
+  if (!options.skipIos) {
+    const path = locatePbxproj(projectRoot, options.pbxprojPath);
+    if (path) {
+      files.push({ platform: 'ios', path });
+    } else {
+      missing.push('ios');
+    }
+  }
+
+  if (files.length === 0) {
+    throw new Error(
+      options.skipAndroid && options.skipIos
+        ? 'Nothing to sync: both platforms are skipped'
+        : `No native project files found in ${projectRoot}.\n` +
+            `Expected android/app/build.gradle or ios/<Project>.xcodeproj/project.pbxproj; ` +
+            `use --gradle-path or --pbxproj-path for other locations.`,
+    );
+  }
+
+  return { files, missing };
+}
+
+function readPlatformStatus(
+  projectRoot: string,
+  file: NativeFile,
+  target: ResolvedVersions,
+  configuration?: string,
+): PlatformStatus {
+  const values = readNativeValues(
+    projectRoot,
+    file.platform,
+    file.platform === 'android'
+      ? { gradlePath: file.path }
+      : { pbxprojPath: file.path, configuration },
+  );
+
+  return {
+    platform: file.platform,
+    path: file.path,
+    ...values,
+    inSync:
+      values.versionName === target.versionName &&
+      values.versionCode === String(target.versionCode),
+  };
+}
+
+/**
+ * Compare the native files with the resolved version name and code without
+ * writing anything.
+ */
+export function checkVersions(
+  projectRoot: string,
+  options: SyncOptions = {},
+): VersionStatus {
+  const { name, version } = getPackageInfo(projectRoot);
+  const target = resolveVersions(projectRoot, options);
+  const { files, missing } = locateNativeFiles(projectRoot, options);
+
+  return {
+    packageName: name,
+    packageVersion: version,
+    target,
+    overridden:
+      options.versionName !== undefined || options.versionCode !== undefined,
+    platforms: files.map((file) =>
+      readPlatformStatus(projectRoot, file, target, options.configuration),
+    ),
+    missing,
+  };
+}
+
+/**
+ * Write the resolved version name and code to the native files of the
+ * platforms that are not skipped and report their state afterwards. A
+ * platform whose file cannot be found is listed as missing; when no file is
+ * left, an error is thrown.
+ */
+export function syncVersions(
+  projectRoot: string,
+  options: SyncOptions = {},
+): SyncStatus {
+  const before = checkVersions(projectRoot, options);
+  const { versionName, versionCode } = before.target;
+
+  for (const { platform, path } of before.platforms) {
+    if (platform === 'android') {
+      updateAndroidVersion(projectRoot, versionName, versionCode, path);
+    } else {
+      updateIOSVersion(projectRoot, versionName, versionCode.toString(), path);
+    }
+  }
+
+  const after = checkVersions(projectRoot, options);
+  return {
+    ...after,
+    platforms: after.platforms.map((platform, i) => ({
+      ...platform,
+      updated: !before.platforms[i].inSync,
+    })),
   };
 }
 

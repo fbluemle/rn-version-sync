@@ -16,7 +16,7 @@ describe('updateIOSVersion', () => {
       ios: [{ name: 'Release' }],
     });
 
-    const result = updateIOSVersion(project.root, '2.3.4', '20304', false);
+    const result = updateIOSVersion(project.root, '2.3.4', '20304');
 
     expect(result).toBe(project.pbxprojPath());
     const content = project.readPbxproj();
@@ -27,7 +27,7 @@ describe('updateIOSVersion', () => {
   it('updates ALL build configurations (Debug + Release)', () => {
     project = new TestProject({ android: false });
 
-    updateIOSVersion(project.root, '2.3.4', '20304', false);
+    updateIOSVersion(project.root, '2.3.4', '20304');
 
     const content = project.readPbxproj();
 
@@ -46,7 +46,7 @@ describe('updateIOSVersion', () => {
       ios: [{ name: 'Debug' }, { name: 'Release' }, { name: 'Staging' }],
     });
 
-    updateIOSVersion(project.root, '3.0.0', '30000', false);
+    updateIOSVersion(project.root, '3.0.0', '30000');
 
     const content = project.readPbxproj();
 
@@ -62,7 +62,7 @@ describe('updateIOSVersion', () => {
   it('returns null when ios directory is missing', () => {
     project = new TestProject({ android: false, ios: false });
 
-    expect(updateIOSVersion(project.root, '1.0.0', '10000', false)).toBeNull();
+    expect(updateIOSVersion(project.root, '1.0.0', '10000')).toBeNull();
   });
 
   it('throws when the file has no version settings', () => {
@@ -71,9 +71,9 @@ describe('updateIOSVersion', () => {
       ios: [{ name: 'Release', version: null, buildNumber: null }],
     });
 
-    expect(() =>
-      updateIOSVersion(project.root, '1.0.0', '10000', false),
-    ).toThrow('No MARKETING_VERSION found');
+    expect(() => updateIOSVersion(project.root, '1.0.0', '10000')).toThrow(
+      'No MARKETING_VERSION found',
+    );
   });
 
   it('does not write file when nothing changed', () => {
@@ -83,7 +83,7 @@ describe('updateIOSVersion', () => {
     });
 
     const before = fs.statSync(project.pbxprojPath()).mtimeMs;
-    updateIOSVersion(project.root, '2.3.4', '20304', false);
+    updateIOSVersion(project.root, '2.3.4', '20304');
     const after = fs.statSync(project.pbxprojPath()).mtimeMs;
     expect(after).toBe(before);
   });
@@ -91,13 +91,7 @@ describe('updateIOSVersion', () => {
   it('uses explicit pbxprojPath when provided', () => {
     project = new TestProject({ android: false });
 
-    updateIOSVersion(
-      project.root,
-      '5.0.0',
-      '50000',
-      false,
-      project.pbxprojPath(),
-    );
+    updateIOSVersion(project.root, '5.0.0', '50000', project.pbxprojPath());
 
     const content = project.readPbxproj();
     expect(content).toContain('MARKETING_VERSION = 5.0.0;');
@@ -111,7 +105,6 @@ describe('updateIOSVersion', () => {
         project.root,
         '1.0.0',
         '10000',
-        false,
         '/nonexistent/project.pbxproj',
       ),
     ).toThrow('project.pbxproj not found at specified path');
@@ -373,7 +366,7 @@ describe('getIOSAppId', () => {
   });
 
   it('throws when the configuration has no PRODUCT_BUNDLE_IDENTIFIER', () => {
-    project = new TestProject({ android: false });
+    project = new TestProject({ android: false, ios: [{ name: 'Release' }] });
 
     expect(() => getIOSAppId(project.root)).toThrow(
       'No PRODUCT_BUNDLE_IDENTIFIER in build configuration "Release" of target "TestApp"',

@@ -46,8 +46,18 @@ const defaults = {
   version: '1.0.0',
   android: { versionName: '1.0.0', versionCode: 1, quote: '"' as const },
   ios: [
-    { name: 'Debug', version: '1.0.0', buildNumber: '1' },
-    { name: 'Release', version: '1.0.0', buildNumber: '1' },
+    {
+      name: 'Debug',
+      version: '1.0.0',
+      buildNumber: '1',
+      bundleId: 'com.testapp',
+    },
+    {
+      name: 'Release',
+      version: '1.0.0',
+      buildNumber: '1',
+      bundleId: 'com.testapp',
+    },
   ],
 };
 

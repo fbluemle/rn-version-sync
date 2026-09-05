@@ -17,7 +17,7 @@ describe('updateAndroidVersion', () => {
   it('updates versionName and versionCode', () => {
     project = new TestProject({ ios: false });
 
-    const result = updateAndroidVersion(project.root, '2.3.4', 20304, false);
+    const result = updateAndroidVersion(project.root, '2.3.4', 20304);
 
     expect(result).toBe(project.gradlePath());
     const content = project.readGradle();
@@ -32,7 +32,7 @@ describe('updateAndroidVersion', () => {
     });
 
     const before = fs.statSync(project.gradlePath()).mtimeMs;
-    updateAndroidVersion(project.root, '1.2.3', 10203, false);
+    updateAndroidVersion(project.root, '1.2.3', 10203);
     const after = fs.statSync(project.gradlePath()).mtimeMs;
     expect(after).toBe(before);
   });
@@ -40,18 +40,16 @@ describe('updateAndroidVersion', () => {
   it('returns null when build.gradle is missing', () => {
     project = new TestProject({ android: false, ios: false });
 
-    expect(
-      updateAndroidVersion(project.root, '1.0.0', 10000, false),
-    ).toBeNull();
+    expect(updateAndroidVersion(project.root, '1.0.0', 10000)).toBeNull();
   });
 
   it('throws when build.gradle has no version settings', () => {
     project = new TestProject({ ios: false });
     fs.writeFileSync(project.gradlePath(), 'android {\n}\n');
 
-    expect(() =>
-      updateAndroidVersion(project.root, '1.0.0', 10000, false),
-    ).toThrow('No versionName found');
+    expect(() => updateAndroidVersion(project.root, '1.0.0', 10000)).toThrow(
+      'No versionName found',
+    );
   });
 
   it('handles single-quoted versionName', () => {
@@ -60,7 +58,7 @@ describe('updateAndroidVersion', () => {
       ios: false,
     });
 
-    updateAndroidVersion(project.root, '2.0.0', 20000, false);
+    updateAndroidVersion(project.root, '2.0.0', 20000);
 
     const content = project.readGradle();
     expect(content).toContain("versionName '2.0.0'");
@@ -69,13 +67,7 @@ describe('updateAndroidVersion', () => {
   it('uses explicit gradlePath when provided', () => {
     project = new TestProject({ ios: false });
 
-    updateAndroidVersion(
-      project.root,
-      '5.0.0',
-      50000,
-      false,
-      project.gradlePath(),
-    );
+    updateAndroidVersion(project.root, '5.0.0', 50000, project.gradlePath());
 
     const content = project.readGradle();
     expect(content).toContain('versionName "5.0.0"');
@@ -89,7 +81,6 @@ describe('updateAndroidVersion', () => {
         project.root,
         '1.0.0',
         10000,
-        false,
         '/nonexistent/build.gradle',
       ),
     ).toThrow('build.gradle not found at specified path');

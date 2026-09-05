@@ -36,13 +36,35 @@ no-op.
 
 ## Usage
 
-Run it once with npx:
+Without arguments, the command compares the native files with the version in
+`package.json` and exits with status 1 when a platform is out of sync, which
+makes it usable as a CI check:
 
-```bash
-npx rn-version-sync
+```
+$ npx rn-version-sync
+PLATFORM  APP ID           VERSION        STATUS
+js        example-app      1.2.3
+android   com.example.app  1.2.3 (10203)  ok
+ios       com.example.app  1.2.2 (10202)  outdated
+Run with --write to update the native files.
 ```
 
-Or install it as a dev dependency and hook it into the `npm version` lifecycle:
+Every row shows what its file says: `name` and `version` from `package.json`
+in the `js` row, and app id, version name and version code from the native
+files. When `--version-name` or `--version-code` replace the `package.json`
+values, the `js` row's status names the target, for example
+`overridden 2.0.0 (20000)`. Add `--write` to update the native files:
+
+```
+$ npx rn-version-sync --write
+PLATFORM  APP ID           VERSION        STATUS
+js        example-app      1.2.3
+android   com.example.app  1.2.3 (10203)  unchanged
+ios       com.example.app  1.2.3 (10203)  updated
+```
+
+To keep the native files in step with `npm version`, install it as a dev
+dependency and hook it into the `version` lifecycle:
 
 ```bash
 npm install --save-dev rn-version-sync
@@ -53,7 +75,7 @@ yarn add -D rn-version-sync
 ```json
 {
   "scripts": {
-    "version": "rn-version-sync && git add -u"
+    "version": "rn-version-sync --write && git add -u"
   }
 }
 ```
@@ -61,23 +83,23 @@ yarn add -D rn-version-sync
 Now `npm version patch|minor|major` bumps `package.json` and the native files
 together, in one commit.
 
-A platform whose native file cannot be found is skipped with a warning (pass
-`--skip-android` or `--skip-ios` to silence it), and the command fails when
-nothing could be synced.
+A platform whose native file cannot be found is listed as `not found` (pass
+`--skip-android` or `--skip-ios` to leave it out), and the command fails when
+no native file is left.
 
 ### Options
 
 | Option | Description |
 | ------ | ----------- |
-| `--version-name <name>` | Write this version name instead of the `package.json` version. Requires `--version-code` unless it is semver. |
-| `--version-code <code>` | Write this version code instead of the calculated one |
+| `--write` | Update the native files instead of only comparing them |
+| `--version-name <name>` | Use this version name instead of the `package.json` version. Requires `--version-code` unless it is semver. |
+| `--version-code <code>` | Use this version code instead of the calculated one |
 | `--reserve-builds <n>` | Multiply the calculated version code by `n` so each version owns `n` consecutive codes, e.g. for CI builds that bump the code per build (`100` turns `10203` into `1020300`). Ignored with `--version-code`. |
-| `--skip-android`, `--skip-ios` | Leave that platform untouched |
+| `--skip-android`, `--skip-ios` | Ignore that platform |
 | `--project-dir <dir>` | Project root (default: current directory) |
-| `--gradle-path <path>` | Android `build.gradle` to update, instead of `android/app/build.gradle` |
-| `--pbxproj-path <path>` | iOS `project.pbxproj` to update, instead of the first `.xcodeproj` in `ios/` |
-| `--dry-run` | Print the resolved version name and code without writing anything |
-| `-v, --verbose` | Log every value and file as it is updated |
+| `--gradle-path <path>` | Android `build.gradle` to use, instead of `android/app/build.gradle` |
+| `--pbxproj-path <path>` | iOS `project.pbxproj` to use, instead of the first `.xcodeproj` in `ios/` |
+| `--configuration <name>` | Xcode build configuration to read the iOS values from, in the table and with the `--print*` flags (default `Release`) |
 
 Relative `--gradle-path` and `--pbxproj-path` values are resolved against the
 project directory. Version codes must be positive integers up to
@@ -86,7 +108,7 @@ project directory. Version codes must be positive integers up to
 ## Reading values from native files
 
 The `--print*` flags read what is actually written in the native files instead
-of syncing. They print the requested value to stdout and nothing else, which
+of comparing. They print the requested value to stdout and nothing else, which
 makes them handy for CI scripts that tag releases in Sentry, GitHub, and the
 like. `--gradle-path` and `--pbxproj-path` apply here as well.
 
@@ -183,16 +205,29 @@ steps:
 The same functionality is available as a module, with type definitions:
 
 ```js
-const { syncVersions, readNativeValues } = require('rn-version-sync');
+const { checkVersions, syncVersions, readNativeValues } = require('rn-version-sync');
+
+checkVersions(process.cwd());
+// {
+//   packageName: 'example-app',
+//   packageVersion: '1.2.3',
+//   target: { versionName: '1.2.3', versionCode: 10203 },
+//   overridden: false,
+//   platforms: [
+//     { platform: 'android', path: '/app/android/app/build.gradle', appId: 'com.example.app', versionName: '1.2.3', versionCode: '10203', inSync: true },
+//     { platform: 'ios', path: '/app/ios/App.xcodeproj/project.pbxproj', appId: 'com.example.app', versionName: '1.2.2', versionCode: '10202', inSync: false },
+//   ],
+//   missing: [],
+// }
 
 syncVersions(process.cwd(), { reserveBuilds: 100 });
-// { android: '/app/android/app/build.gradle', ios: '/app/ios/App.xcodeproj/project.pbxproj' }
+// same shape, read back after writing, with an `updated` flag per platform
 
 readNativeValues(process.cwd(), 'ios', { configuration: 'Staging' });
 // { appId: 'com.example.app.staging', versionName: '1.2.3', versionCode: '1020300' }
 ```
 
-`resolveVersions`, `formatTemplate` and `formatEnv` back `--dry-run`,
+`resolveVersions`, `formatTemplate` and `formatEnv` back the target row,
 `--format` and `--print-env` in the same way.
 
 ## Requirements

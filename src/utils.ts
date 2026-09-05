@@ -7,6 +7,35 @@ export interface SemverComponents {
   patch: number;
 }
 
+export interface PackageJson {
+  name?: string;
+  version?: string;
+}
+
+function parsePackageJson(packagePath: string): PackageJson {
+  try {
+    return JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+  } catch (error) {
+    throw new Error(
+      `Failed to parse package.json at: ${packagePath}\n` +
+        `Error: ${(error as Error).message}`,
+    );
+  }
+}
+
+/**
+ * Read the "name" and "version" fields of package.json as written; a field
+ * is undefined when it or the file is missing.
+ */
+export function getPackageInfo(projectRoot: string): PackageJson {
+  const packagePath = path.join(projectRoot, 'package.json');
+  if (!fs.existsSync(packagePath)) {
+    return {};
+  }
+  const { name, version } = parsePackageJson(packagePath);
+  return { name, version };
+}
+
 /**
  * Read version from package.json
  */
@@ -19,16 +48,7 @@ export function getPackageVersion(projectRoot: string): string {
     );
   }
 
-  let packageJson: { version?: string };
-  try {
-    packageJson = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
-  } catch (error) {
-    throw new Error(
-      `Failed to parse package.json at: ${packagePath}\n` +
-        `Error: ${(error as Error).message}`,
-    );
-  }
-
+  const packageJson = parsePackageJson(packagePath);
   if (!packageJson.version) {
     throw new Error(
       `No "version" field found in package.json at: ${packagePath}\n` +
