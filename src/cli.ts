@@ -113,7 +113,7 @@ Project-wide defaults for --reserve-builds, --skip-android, --skip-ios,
 --gradle-path, --pbxproj-path and --configuration can be set in package.json,
 where a command line option takes precedence:
 
-  "rn-version-sync": { "reserveBuilds": 100 }`,
+  "rnVersionSync": { "reserveBuilds": 100 }`,
   )
   .option('--write', 'Update the native files instead of only comparing them')
   .option(

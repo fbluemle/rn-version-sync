@@ -107,13 +107,13 @@ project directory. Version codes must be positive integers up to
 
 ### Configuration
 
-Settings that are permanent for a project go under the `rn-version-sync` key
+Settings that are permanent for a project go under the `rnVersionSync` key
 of `package.json`, so the check, `--write` and the `version` script all use
 the same values without repeating them on every call:
 
 ```json
 {
-  "rn-version-sync": {
+  "rnVersionSync": {
     "reserveBuilds": 100
   }
 }
@@ -130,6 +130,9 @@ the same values without repeating them on every call:
 A command line option takes precedence over the configured value. Relative
 paths are resolved against the project directory, and an unknown setting or a
 value of the wrong type is an error.
+
+The `rn-version-sync` key used by 0.8.0 is still read, with a warning, until
+1.0.0. Rename it to `rnVersionSync` to keep the configuration working.
 
 ## Reading values from native files
 
@@ -258,7 +261,7 @@ loadConfig(process.cwd());
 
 `resolveVersions`, `formatTemplate` and `formatEnv` back the target row,
 `--format` and `--print-env` in the same way. Like the CLI, all functions fill
-in options that are not passed explicitly from the `rn-version-sync`
+in options that are not passed explicitly from the `rnVersionSync`
 configuration in `package.json`.
 
 ## Requirements

@@ -37,8 +37,10 @@ export interface ProjectOptions {
   iosTargets?: PbxprojTarget[];
   /** Project-level build configurations; default to the targets' names without version settings */
   iosProjectConfigs?: PbxprojBuildConfig[];
-  /** Written as the "rn-version-sync" key of package.json, even when invalid */
+  /** Written as the "rnVersionSync" key of package.json, even when invalid */
   config?: unknown;
+  /** Written as the deprecated "rn-version-sync" key of package.json */
+  legacyConfig?: unknown;
 }
 
 export const APPLICATION_PRODUCT_TYPE = 'com.apple.product-type.application';
@@ -76,7 +78,10 @@ export class TestProject {
           name: 'test-app',
           version: options.version ?? defaults.version,
           ...(options.config !== undefined && {
-            'rn-version-sync': options.config,
+            rnVersionSync: options.config,
+          }),
+          ...(options.legacyConfig !== undefined && {
+            'rn-version-sync': options.legacyConfig,
           }),
         },
         null,
