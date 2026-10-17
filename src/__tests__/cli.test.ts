@@ -230,6 +230,24 @@ describe('cli', () => {
       );
     });
 
+    it('reads the deprecated key with a single warning', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        legacyConfig: { configuration: 'Debug', skipAndroid: true },
+      });
+
+      const result = run(project.root);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain('ios (Debug)');
+      expect(result.stderr).toBe(
+        [
+          'Warning: the "rn-version-sync" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "rnVersionSync"',
+          'Run with --write to update the native files.',
+          '',
+        ].join('\n'),
+      );
+    });
+
     it('rejects an invalid configuration', () => {
       project = new TestProject({
         version: '1.2.3',
@@ -240,7 +258,7 @@ describe('cli', () => {
         status: 1,
         stdout: '',
         stderr:
-          'Error: Invalid "rn-version-sync" configuration in package.json: unknown setting "reserveBuild" (available: reserveBuilds, gradlePath, pbxprojPath, configuration, skipAndroid, skipIos)\n',
+          'Error: Invalid "rnVersionSync" configuration in package.json: unknown setting "reserveBuild" (available: reserveBuilds, gradlePath, pbxprojPath, configuration, skipAndroid, skipIos)\n',
       });
     });
 
@@ -536,7 +554,7 @@ describe('cli', () => {
       expect(result.stdout).toContain('--write');
       expect(result.stdout).toContain('--reserve-builds <n>');
       expect(result.stdout).toContain(
-        '"rn-version-sync": { "reserveBuilds": 100 }',
+        '"rnVersionSync": { "reserveBuilds": 100 }',
       );
     });
   });

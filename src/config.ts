@@ -2,10 +2,16 @@ import * as path from 'node:path';
 import { readPackageJson } from './utils';
 
 /** Key of package.json that holds the project configuration */
-const CONFIG_KEY = 'rn-version-sync';
+const CONFIG_KEY = 'rnVersionSync';
+
+/** Deprecated key, still read with a warning until 1.0.0 */
+const LEGACY_CONFIG_KEY = 'rn-version-sync';
+
+/** Project directories already warned about the deprecated key */
+const warnedLegacyKey = new Set<string>();
 
 /**
- * Project-wide defaults, stored under the "rn-version-sync" key of
+ * Project-wide defaults, stored under the "rnVersionSync" key of
  * package.json. Each setting has a CLI option of the same name, and an
  * explicit option takes precedence over the configured value.
  */
@@ -56,10 +62,34 @@ function isSetting(key: string): key is keyof ProjectConfig {
   return (Object.keys(SETTINGS) as string[]).includes(key);
 }
 
-function invalid(problem: string): Error {
+function invalid(key: string, problem: string): Error {
   return new Error(
-    `Invalid "${CONFIG_KEY}" configuration in package.json: ${problem}`,
+    `Invalid "${key}" configuration in package.json: ${problem}`,
   );
+}
+
+/**
+ * Find the configuration in package.json, falling back to the deprecated key
+ * with a warning printed once per project directory.
+ */
+function readRawConfig(projectRoot: string): { key: string; raw: unknown } {
+  const packageJson = readPackageJson(projectRoot);
+  if (packageJson[LEGACY_CONFIG_KEY] === undefined) {
+    return { key: CONFIG_KEY, raw: packageJson[CONFIG_KEY] };
+  }
+  if (packageJson[CONFIG_KEY] !== undefined) {
+    throw new Error(
+      `package.json has both "${CONFIG_KEY}" and "${LEGACY_CONFIG_KEY}" keys; remove "${LEGACY_CONFIG_KEY}"`,
+    );
+  }
+  const resolvedRoot = path.resolve(projectRoot);
+  if (!warnedLegacyKey.has(resolvedRoot)) {
+    warnedLegacyKey.add(resolvedRoot);
+    console.warn(
+      `Warning: the "${LEGACY_CONFIG_KEY}" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "${CONFIG_KEY}"`,
+    );
+  }
+  return { key: LEGACY_CONFIG_KEY, raw: packageJson[LEGACY_CONFIG_KEY] };
 }
 
 /**
@@ -68,21 +98,24 @@ function invalid(problem: string): Error {
  * errors, and relative paths are resolved against the project directory.
  */
 export function loadConfig(projectRoot: string): ProjectConfig {
-  const raw = readPackageJson(projectRoot)[CONFIG_KEY];
+  const { key: configKey, raw } = readRawConfig(projectRoot);
   if (raw === undefined) {
     return {};
   }
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-    throw invalid('must be an object');
+    throw invalid(configKey, 'must be an object');
   }
 
   for (const [key, value] of Object.entries(raw)) {
     if (!isSetting(key)) {
       const available = Object.keys(SETTINGS).join(', ');
-      throw invalid(`unknown setting "${key}" (available: ${available})`);
+      throw invalid(
+        configKey,
+        `unknown setting "${key}" (available: ${available})`,
+      );
     }
     if (!SETTINGS[key].isValid(value)) {
-      throw invalid(`${key} must be ${SETTINGS[key].expected}`);
+      throw invalid(configKey, `${key} must be ${SETTINGS[key].expected}`);
     }
   }
 
