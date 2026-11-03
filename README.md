@@ -9,22 +9,22 @@ and iOS).
 
 Reads the `version` from `package.json` and writes it to the native projects:
 
-| Platform | File | Version name | Version code |
-| -------- | ---- | ------------ | ------------ |
-| Android | `android/app/build.gradle` | `versionName` | `versionCode` |
-| iOS | `ios/<Project>.xcodeproj/project.pbxproj` | `MARKETING_VERSION` | `CURRENT_PROJECT_VERSION` |
+| Platform | File                                      | Version name        | Version code              |
+| -------- | ----------------------------------------- | ------------------- | ------------------------- |
+| Android  | `android/app/build.gradle`                | `versionName`       | `versionCode`             |
+| iOS      | `ios/<Project>.xcodeproj/project.pbxproj` | `MARKETING_VERSION` | `CURRENT_PROJECT_VERSION` |
 
 The version code is calculated from semver as
 `10000 * major + 100 * minor + patch`. The same version always produces the
 same code, higher versions produce higher codes, and both platforms get the
 identical value:
 
-| Version | Version code |
-| ------- | ------------ |
-| `1.0.0` | `10000` |
-| `1.2.3` | `10203` |
-| `2.5.10` | `20510` |
-| `12.34.56` | `123456` |
+| Version    | Version code |
+| ---------- | ------------ |
+| `1.0.0`    | `10000`      |
+| `1.2.3`    | `10203`      |
+| `2.5.10`   | `20510`      |
+| `12.34.56` | `123456`     |
 
 Pre-release and build metadata (`1.2.3-beta.1`) are ignored when calculating
 the code; the version name is written as is. Only the version lines are
@@ -89,21 +89,26 @@ no native file is left.
 
 ### Options
 
-| Option | Description |
-| ------ | ----------- |
-| `--write` | Update the native files instead of only comparing them |
-| `--version-name <name>` | Use this version name instead of the `package.json` version. Requires `--version-code` unless it is semver. |
-| `--version-code <code>` | Use this version code instead of the calculated one |
-| `--reserve-builds <n>` | Multiply the calculated version code by `n` so each version owns `n` consecutive codes, e.g. for CI builds that bump the code per build (`100` turns `10203` into `1020300`). Ignored with `--version-code`. Best set once as `reserveBuilds` in `package.json`, see [Configuration](#configuration). |
-| `--skip-android`, `--skip-ios` | Ignore that platform |
-| `--project-dir <dir>` | Project root (default: current directory) |
-| `--gradle-path <path>` | Android `build.gradle` to use, instead of `android/app/build.gradle` |
-| `--pbxproj-path <path>` | iOS `project.pbxproj` to use, instead of the first `.xcodeproj` in `ios/` |
-| `--configuration <name>` | Xcode build configuration to read the iOS values from, in the table and with the `--print*` flags (default `Release`) |
+| Option                         | Description                                                                                                           |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `--write`                      | Update the native files instead of only comparing them                                                                |
+| `--version-name <name>`        | Use this version name instead of the `package.json` version. Requires `--version-code` unless it is semver.           |
+| `--version-code <code>`        | Use this version code instead of the calculated one                                                                   |
+| `--reserve-builds <n>`         | Multiply the calculated version code by `n` (see below)                                                               |
+| `--skip-android`, `--skip-ios` | Ignore that platform                                                                                                  |
+| `--project-dir <dir>`          | Project root (default: current directory)                                                                             |
+| `--gradle-path <path>`         | Android `build.gradle` to use, instead of `android/app/build.gradle`                                                  |
+| `--pbxproj-path <path>`        | iOS `project.pbxproj` to use, instead of the first `.xcodeproj` in `ios/`                                             |
+| `--configuration <name>`       | Xcode build configuration to read the iOS values from, in the table and with the `--print*` flags (default `Release`) |
 
 Relative `--gradle-path` and `--pbxproj-path` values are resolved against the
 project directory. Version codes must be positive integers up to
 `2147483647`, the 32-bit limit both platforms enforce.
+
+`--reserve-builds` makes each version own `n` consecutive codes, e.g. for CI
+builds that bump the code per build (`100` turns `10203` into `1020300`). It
+is ignored with `--version-code`, and best set once as `reserveBuilds` in
+`package.json`, see [Configuration](#configuration).
 
 ### Configuration
 
@@ -119,12 +124,12 @@ the same values without repeating them on every call:
 }
 ```
 
-| Setting | Option |
-| ------- | ------ |
-| `reserveBuilds` (integer) | `--reserve-builds` |
-| `gradlePath` (string) | `--gradle-path` |
-| `pbxprojPath` (string) | `--pbxproj-path` |
-| `configuration` (string) | `--configuration` |
+| Setting                            | Option                         |
+| ---------------------------------- | ------------------------------ |
+| `reserveBuilds` (integer)          | `--reserve-builds`             |
+| `gradlePath` (string)              | `--gradle-path`                |
+| `pbxprojPath` (string)             | `--pbxproj-path`               |
+| `configuration` (string)           | `--configuration`              |
 | `skipAndroid`, `skipIos` (boolean) | `--skip-android`, `--skip-ios` |
 
 A command line option takes precedence over the configured value. Relative
@@ -234,7 +239,12 @@ steps:
 The same functionality is available as a module, with type definitions:
 
 ```js
-const { checkVersions, syncVersions, readNativeValues, loadConfig } = require('rn-version-sync');
+const {
+  checkVersions,
+  syncVersions,
+  readNativeValues,
+  loadConfig,
+} = require('rn-version-sync');
 
 checkVersions(process.cwd());
 // {
