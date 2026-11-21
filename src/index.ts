@@ -4,6 +4,8 @@ import {
   locateBuildGradle,
   updateAndroidVersion,
 } from './android';
+import type { Log } from './api';
+import { type AppStoreKey, getAppStoreVersionCodes } from './appstore';
 import { type ProjectConfig, loadConfig } from './config';
 import {
   getIOSAppId,
@@ -11,14 +13,18 @@ import {
   locatePbxproj,
   updateIOSVersion,
 } from './ios';
+import { getPlayVersionCodes } from './play';
 import {
   MAX_VERSION_CODE,
   calculateVersionCode,
   getPackageInfo,
   getPackageVersion,
+  nextVersionCode,
 } from './utils';
 
 export type Platform = 'android' | 'ios';
+
+export const PLATFORMS: Platform[] = ['android', 'ios'];
 
 export type ReadOptions = Pick<
   ProjectConfig,
@@ -363,12 +369,108 @@ export function formatEnv(values: NativeValues): string {
   return output;
 }
 
+/** Credentials of the stores to query, by platform */
+export interface StoreCredentials {
+  /** Google Play: content of a service account JSON key */
+  android?: string;
+  /** App Store Connect: API key */
+  ios?: AppStoreKey;
+}
+
+export interface StoreOptions extends ReadOptions {
+  /** App id in both stores (default: the one in the native build file) */
+  appId?: string;
+  /** Google Play package name, where it is not appId */
+  androidAppId?: string;
+  /** App Store bundle id, where it is not appId */
+  iosAppId?: string;
+  /** Receives the store requests and their raw responses */
+  log?: Log;
+}
+
+/**
+ * Version codes the store of one platform lists for the app, in ascending
+ * order: those of the current bundles and APKs in Google Play for android,
+ * those of all builds in App Store Connect for ios.
+ */
+export async function getStoreVersionCodes(
+  projectRoot: string,
+  platform: Platform,
+  credentials: StoreCredentials,
+  options: StoreOptions = {},
+): Promise<number[]> {
+  const opts = withConfig(projectRoot, options);
+  const appId =
+    (platform === 'android' ? opts.androidAppId : opts.iosAppId) ??
+    opts.appId ??
+    readAppId(projectRoot, platform, opts);
+
+  if (platform === 'android') {
+    if (credentials.android === undefined) {
+      throw new Error('No Google Play credentials given');
+    }
+    return getPlayVersionCodes(appId, credentials.android, opts.log);
+  }
+  if (credentials.ios === undefined) {
+    throw new Error('No App Store Connect credentials given');
+  }
+  return getAppStoreVersionCodes(appId, credentials.ios, opts.log);
+}
+
+export interface NextVersionCodeOptions
+  extends StoreOptions,
+    Omit<SyncOptions, 'versionCode'> {
+  /** Version codes in use that the stores do not know about */
+  taken?: number[];
+}
+
+/**
+ * Next free version code of the current version, which owns reserveBuilds
+ * consecutive codes starting at its calculated code: one above the highest
+ * code in use by the stores of the platforms that are not skipped, by taken,
+ * or by the calculated code itself. Throws when no code of the version is
+ * left or a store holds a code of a later version.
+ */
+export async function getNextVersionCode(
+  projectRoot: string,
+  credentials: StoreCredentials,
+  options: NextVersionCodeOptions = {},
+): Promise<number> {
+  const opts = withConfig(projectRoot, options);
+  const slots = opts.reserveBuilds ?? 1;
+  const { versionCode: base } = resolveTarget(projectRoot, {
+    ...opts,
+    versionCode: undefined,
+  });
+  if (slots < 2) {
+    throw new Error(
+      'reserve-builds must be at least 2 to derive a next version code',
+    );
+  }
+
+  const platforms = PLATFORMS.filter((platform) =>
+    platform === 'android' ? !opts.skipAndroid : !opts.skipIos,
+  );
+  if (platforms.length === 0) {
+    throw new Error('Nothing to query: both platforms are skipped');
+  }
+
+  const found = await Promise.all(
+    platforms.map((platform) =>
+      getStoreVersionCodes(projectRoot, platform, credentials, opts),
+    ),
+  );
+  return nextVersionCode(base, slots, [...(opts.taken ?? []), ...found.flat()]);
+}
+
 // Lower-level platform functions for programmatic use
 export {
   getAndroidAppId,
   getAndroidVersions,
   updateAndroidVersion,
 } from './android';
+export { type AppStoreKey, getAppStoreVersionCodes } from './appstore';
 export { type ProjectConfig, loadConfig } from './config';
 export { getIOSAppId, getIOSVersions, updateIOSVersion } from './ios';
-export { getPackageVersion } from './utils';
+export { getPlayVersionCodes } from './play';
+export { getPackageVersion, nextVersionCode } from './utils';

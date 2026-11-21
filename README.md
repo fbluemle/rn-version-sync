@@ -234,6 +234,110 @@ steps:
   does not exist, or if a value is a build setting variable such as
   `$(PRODUCT_NAME:rfc1034identifier)`. xcconfig files are not resolved.
 
+## Version codes in the stores
+
+A store rejects a version code it has seen before. When every CI build gets
+its own code out of the range reserved with `reserveBuilds`, the stores are
+therefore the source of truth for which codes are taken. Two flags query
+them, Google Play for `android` and App Store Connect for `ios`:
+
+```bash
+npx rn-version-sync --print-store-version-codes android
+# 1020301
+# 1020302
+
+npx rn-version-sync --print-next-version-code
+# 1020303
+```
+
+| Option                                   | Description                                                                   |
+| ---------------------------------------- | ----------------------------------------------------------------------------- |
+| `--print-store-version-codes <platform>` | Print the version codes in use in the store, one per line in ascending order  |
+| `--print-next-version-code`              | Print the next version code of the current version that is free in the stores |
+| `--taken <codes...>`                     | Further version codes in use, for `--print-next-version-code`                 |
+| `--app-id <id>`                          | App id to query in the stores, instead of the one in the native files         |
+| `--android-app-id <id>`                  | Google Play package name to query, where it is not `--app-id`                 |
+| `--ios-app-id <id>`                      | App Store bundle id to query, where it is not `--app-id`                      |
+| `--verbose`                              | Print the store requests and their raw responses to stderr                    |
+
+The requests are made with Node's built-in `fetch` and `crypto`, without
+further dependencies.
+
+`--verbose` prints every store request with the status and raw body of its
+response to stderr, which leaves the output on stdout as it is. For App Store
+Connect this includes the upload date and processing state of each build.
+The token request to Google is not printed, as its response is a secret.
+
+### Credentials
+
+Credentials are read from the environment, as content rather than as file
+paths:
+
+| Variable                    | Value                                              |
+| --------------------------- | -------------------------------------------------- |
+| `PLAY_SERVICE_ACCOUNT_JSON` | Google Play: content of a service account JSON key |
+| `ASC_KEY_ID`                | App Store Connect: ID of an API team key           |
+| `ASC_ISSUER_ID`             | App Store Connect: issuer ID of the key            |
+| `ASC_PRIVATE_KEY`           | App Store Connect: content of the key's `.p8` file |
+
+Only the variables of the queried stores are required. The service account
+needs access to the app in Play Console, and the role of the API key must
+allow listing builds. With key files at hand, pass their content:
+
+```bash
+PLAY_SERVICE_ACCOUNT_JSON=$(cat play.json) \
+  npx rn-version-sync --print-store-version-codes android
+```
+
+### Which codes are found
+
+- Google Play: the version codes of the app's current bundles and APKs. One
+  that a later release has replaced is no longer listed, so this is not a
+  history of all uploads. Play only lists them inside an edit, so the command
+  opens one and deletes it again without committing it, which changes nothing
+  in Play.
+- App Store Connect: the build numbers of all builds of the app, expired ones
+  included. Build numbers that are not plain integers, such as `1.2.3`, are
+  left out.
+
+The app is the one named by the app id in the native file, read in the same
+way as by `--print-app-id` (on iOS from the build configuration given by
+`--configuration`). Where that is not the id in the store, for example with
+an `applicationIdSuffix` or product flavors on Android, name it with
+`--app-id`, or with `--android-app-id` and `--ios-app-id` where the two
+stores differ.
+
+### The next version code
+
+`--print-next-version-code` requires `reserveBuilds` of at least 2. With
+`n` reserved builds, a version owns the `n` codes starting at its calculated
+code. That first code is the one `--write` puts into the native files, and
+builds get the ones after it: with `reserveBuilds` of `100`, version `1.2.3`
+owns `1020300` to `1020399`, and its builds are numbered from `1020301`.
+
+The command prints the code above the highest one in use, where in use means
+found in the store of a platform that is not skipped, listed with `--taken`,
+or the first code of the version. Codes of earlier versions do not matter,
+and gaps below the highest code are not filled. It fails instead of printing
+a code when no code of the version is left, and when a code of a later
+version is already in use.
+
+The stores do not know about everything: a build appears in App Store
+Connect only some minutes after its upload, a build that failed before the
+upload never does, Google Play no longer lists a code once it is not
+current, and two runs started at the same time see the same state.
+Covering this is up to the caller, which can keep its own record of the codes
+it handed out and pass them with `--taken`. In CI this could be a git ref per
+code, created with a push that fails if the ref exists:
+
+```bash
+taken=$(git ls-remote origin 'refs/builds/*' | sed 's|.*/||')
+code=$(npx rn-version-sync --print-next-version-code \
+  ${taken:+--taken $taken})
+git push --force-with-lease="refs/builds/$code:" origin "HEAD:refs/builds/$code"
+npx rn-version-sync --write --version-code "$code"
+```
+
 ## Programmatic use
 
 The same functionality is available as a module, with type definitions:
@@ -244,6 +348,8 @@ const {
   syncVersions,
   readNativeValues,
   loadConfig,
+  getStoreVersionCodes,
+  getNextVersionCode,
 } = require('rn-version-sync');
 
 checkVersions(process.cwd());
@@ -267,12 +373,31 @@ readNativeValues(process.cwd(), 'ios', { configuration: 'Staging' });
 
 loadConfig(process.cwd());
 // { reserveBuilds: 100 }
+
+const credentials = {
+  android: process.env.PLAY_SERVICE_ACCOUNT_JSON,
+  ios: {
+    keyId: process.env.ASC_KEY_ID,
+    issuerId: process.env.ASC_ISSUER_ID,
+    privateKey: process.env.ASC_PRIVATE_KEY,
+  },
+};
+
+await getStoreVersionCodes(process.cwd(), 'ios', credentials);
+// [1020301, 1020302]
+
+await getNextVersionCode(process.cwd(), credentials, { taken: [1020303] });
+// 1020304
 ```
 
 `resolveVersions`, `formatTemplate` and `formatEnv` back the target row,
 `--format` and `--print-env` in the same way. Like the CLI, all functions fill
 in options that are not passed explicitly from the `rnVersionSync`
-configuration in `package.json`.
+configuration in `package.json`. The two store functions are asynchronous and
+take their credentials as an argument instead of reading the environment;
+a `log` function in their options receives what `--verbose` prints.
+`getPlayVersionCodes` and `getAppStoreVersionCodes` query a store by app id
+without a project directory, and `nextVersionCode` is the calculation alone.
 
 ## Requirements
 

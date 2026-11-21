@@ -1,15 +1,24 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   checkVersions,
   formatEnv,
   formatTemplate,
+  getNextVersionCode,
+  getStoreVersionCodes,
   readNativeValues,
   resolveVersions,
   syncVersions,
 } from '../index';
-import { TestProject, buildGradle } from './helpers';
+import {
+  TestProject,
+  appStoreRoutes,
+  buildGradle,
+  createStoreKeys,
+  playRoutes,
+  stubFetch,
+} from './helpers';
 
 describe('syncVersions', () => {
   let project: TestProject;
@@ -694,5 +703,121 @@ describe('formatTemplate', () => {
     expect(formatTemplate('{} { } literal', project.root, 'ios')).toBe(
       '{} { } literal',
     );
+  });
+});
+
+describe('store version codes', () => {
+  const keys = createStoreKeys();
+  const credentials = {
+    android: keys.serviceAccountJson,
+    ios: keys.appStoreKey,
+  };
+  const ios = [
+    { name: 'Release', bundleId: 'com.example.app' },
+    { name: 'Staging', bundleId: 'com.example.app.staging' },
+  ];
+  let project: TestProject;
+
+  afterEach(() => {
+    project?.cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  describe('getStoreVersionCodes', () => {
+    it('queries Google Play for the app id in build.gradle', async () => {
+      project = new TestProject({ android: { applicationId: 'com.example' } });
+      stubFetch(playRoutes('com.example', [3, 1]));
+
+      await expect(
+        getStoreVersionCodes(project.root, 'android', credentials),
+      ).resolves.toEqual([1, 3]);
+    });
+
+    it('queries App Store Connect for the configured build configuration', async () => {
+      project = new TestProject({ ios, config: { configuration: 'Staging' } });
+      stubFetch(appStoreRoutes('com.example.app.staging', ['5']));
+
+      await expect(
+        getStoreVersionCodes(project.root, 'ios', credentials),
+      ).resolves.toEqual([5]);
+    });
+
+    it('prefers appId, and the app id of the platform over it', async () => {
+      project = new TestProject({ android: false, ios: false });
+      stubFetch({
+        ...playRoutes('com.example.staging', [4]),
+        ...appStoreRoutes('com.other', ['8']),
+      });
+      const options = { appId: 'com.example.staging', iosAppId: 'com.other' };
+
+      await expect(
+        getStoreVersionCodes(project.root, 'android', credentials, options),
+      ).resolves.toEqual([4]);
+      await expect(
+        getStoreVersionCodes(project.root, 'ios', credentials, options),
+      ).resolves.toEqual([8]);
+    });
+
+    it('fails without credentials for the platform', async () => {
+      project = new TestProject();
+
+      await expect(
+        getStoreVersionCodes(project.root, 'android', {}),
+      ).rejects.toThrow('No Google Play credentials given');
+      await expect(
+        getStoreVersionCodes(project.root, 'ios', {}),
+      ).rejects.toThrow('No App Store Connect credentials given');
+    });
+  });
+
+  describe('getNextVersionCode', () => {
+    const config = { reserveBuilds: 100 };
+
+    it('returns the code after the highest one in both stores', async () => {
+      project = new TestProject({ version: '1.2.3', config });
+      stubFetch({
+        ...playRoutes('com.testapp', [1020302, 1020205]),
+        ...appStoreRoutes('com.testapp', ['1020303', '1020301']),
+      });
+
+      await expect(getNextVersionCode(project.root, credentials)).resolves.toBe(
+        1020304,
+      );
+    });
+
+    it('queries only the stores of platforms not skipped', async () => {
+      project = new TestProject({ version: '1.2.3', config, ios: false });
+      const calls = stubFetch(playRoutes('com.testapp', [1020305]));
+
+      await expect(
+        getNextVersionCode(
+          project.root,
+          { android: keys.serviceAccountJson },
+          { skipIos: true },
+        ),
+      ).resolves.toBe(1020306);
+      expect(calls).toHaveLength(5);
+    });
+
+    it('fails without reserved builds', async () => {
+      project = new TestProject({ version: '1.2.3' });
+
+      await expect(
+        getNextVersionCode(project.root, credentials),
+      ).rejects.toThrow(
+        'reserve-builds must be at least 2 to derive a next version code',
+      );
+    });
+
+    it('fails when both platforms are skipped', async () => {
+      project = new TestProject({ version: '1.2.3', config });
+
+      await expect(
+        getNextVersionCode(project.root, credentials, {
+          skipAndroid: true,
+          skipIos: true,
+        }),
+      ).rejects.toThrow('Nothing to query: both platforms are skipped');
+    });
   });
 });

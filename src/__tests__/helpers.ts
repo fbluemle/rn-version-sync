@@ -1,6 +1,8 @@
+import { type KeyObject, generateKeyPairSync } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { vi } from 'vitest';
 
 export interface GradleConfig {
   versionName?: string;
@@ -297,4 +299,114 @@ ${listSections.join('\n')}
 /* End XCConfigurationList section */
 \t};
 }`;
+}
+
+export const TOKEN_URI = 'https://oauth2.googleapis.com/token';
+export const PLAY_API =
+  'https://androidpublisher.googleapis.com/androidpublisher/v3';
+export const APP_STORE_API = 'https://api.appstoreconnect.apple.com';
+
+function pem(key: KeyObject): string {
+  return key.export({ type: 'pkcs8', format: 'pem' }).toString();
+}
+
+/**
+ * Freshly generated store credentials, with the public keys that verify the
+ * tokens signed with them.
+ */
+export function createStoreKeys() {
+  const rsa = generateKeyPairSync('rsa', { modulusLength: 2048 });
+  const ec = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  return {
+    rsaPrivateKey: pem(rsa.privateKey),
+    rsaPublicKey: rsa.publicKey,
+    ecPrivateKey: pem(ec.privateKey),
+    ecPublicKey: ec.publicKey,
+    serviceAccountJson: JSON.stringify({
+      type: 'service_account',
+      client_email: 'ci@example.iam.gserviceaccount.com',
+      private_key: pem(rsa.privateKey),
+      token_uri: TOKEN_URI,
+    }),
+    appStoreKey: {
+      keyId: 'KEY123',
+      issuerId: 'issuer-1',
+      privateKey: pem(ec.privateKey),
+    },
+  };
+}
+
+/** Canned responses by request, written as "METHOD url" */
+export type Routes = Record<string, unknown>;
+
+/**
+ * Routes Google Play answers for an app whose current bundles have the given
+ * version codes.
+ */
+export function playRoutes(packageName: string, bundles: number[]): Routes {
+  const edits = `${PLAY_API}/applications/${packageName}/edits`;
+  return {
+    [`POST ${TOKEN_URI}`]: { access_token: 'play-token' },
+    [`POST ${edits}`]: { id: 'edit1' },
+    [`GET ${edits}/edit1/bundles`]: {
+      bundles: bundles.map((versionCode) => ({ versionCode })),
+    },
+    [`GET ${edits}/edit1/apks`]: {},
+    [`DELETE ${edits}/edit1`]: {},
+  };
+}
+
+export function appStoreAppsUrl(bundleId: string): string {
+  return `${APP_STORE_API}/v1/apps?filter%5BbundleId%5D=${bundleId}&fields%5Bapps%5D=bundleId&limit=200`;
+}
+
+export function appStoreBuildsUrl(appId: string): string {
+  return `${APP_STORE_API}/v1/builds?filter%5Bapp%5D=${appId}&fields%5Bbuilds%5D=version%2CuploadedDate%2CprocessingState%2Cexpired&limit=200`;
+}
+
+/**
+ * Routes App Store Connect answers for an app whose builds have the given
+ * build numbers.
+ */
+export function appStoreRoutes(bundleId: string, versions: string[]): Routes {
+  return {
+    [`GET ${appStoreAppsUrl(bundleId)}`]: {
+      data: [{ id: '42', attributes: { bundleId } }],
+    },
+    [`GET ${appStoreBuildsUrl('42')}`]: {
+      data: versions.map((version) => ({ attributes: { version } })),
+    },
+  };
+}
+
+export interface FetchCall {
+  /** "METHOD url" */
+  request: string;
+  headers: Record<string, string>;
+  body?: string;
+}
+
+/**
+ * Replace the global fetch until vi.unstubAllGlobals(). A route answers with
+ * its value as JSON, or with the value itself when it is a Response; a
+ * request without a route gets a 404. Returns the requests made, in order.
+ */
+export function stubFetch(routes: Routes): FetchCall[] {
+  const calls: FetchCall[] = [];
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+    const request = `${init.method ?? 'GET'} ${url}`;
+    calls.push({
+      request,
+      headers: { ...(init.headers as Record<string, string>) },
+      body: init.body?.toString(),
+    });
+    const route = routes[request];
+    if (route === undefined) {
+      return new Response(`No stub for ${request}`, { status: 404 });
+    }
+    return route instanceof Response
+      ? route
+      : new Response(JSON.stringify(route));
+  });
+  return calls;
 }
