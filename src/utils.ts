@@ -118,3 +118,37 @@ export function calculateVersionCode(version: string): number {
 
   return versionCode;
 }
+
+/**
+ * Distinct values in ascending order
+ */
+export function uniqueAscending(values: number[]): number[] {
+  return [...new Set(values)].sort((a, b) => a - b);
+}
+
+/**
+ * Next free version code of a version that owns the codes from base up to
+ * base + slots - 1: one above the highest code in use, where base itself
+ * counts as in use. Throws when that leaves the range, which is the case
+ * when the range is used up and when a code of a later version is in use.
+ */
+export function nextVersionCode(
+  base: number,
+  slots: number,
+  taken: number[],
+): number {
+  const last = base + slots - 1;
+  const highest = taken.reduce((max, code) => Math.max(max, code), base);
+
+  if (highest > last) {
+    throw new Error(
+      `Version code ${highest} is in use, which is above the range ${base}-${last} of this version`,
+    );
+  }
+  if (highest === last) {
+    throw new Error(
+      `No version code is left in the range ${base}-${last} of this version`,
+    );
+  }
+  return highest + 1;
+}

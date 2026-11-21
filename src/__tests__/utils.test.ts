@@ -5,7 +5,9 @@ import {
   calculateVersionCode,
   getPackageInfo,
   getPackageVersion,
+  nextVersionCode,
   parseSemver,
+  uniqueAscending,
 } from '../utils';
 import { TestProject } from './helpers';
 
@@ -130,5 +132,32 @@ describe('getPackageInfo', () => {
     project = new TestProject();
     fs.rmSync(path.join(project.root, 'package.json'));
     expect(getPackageInfo(project.root)).toEqual({});
+  });
+});
+
+describe('uniqueAscending', () => {
+  it('sorts numerically and drops duplicates', () => {
+    expect(uniqueAscending([10, 9, 100, 9, 10])).toEqual([9, 10, 100]);
+  });
+});
+
+describe('nextVersionCode', () => {
+  it('returns the code above the highest one in use', () => {
+    expect(nextVersionCode(1020300, 100, [])).toBe(1020301);
+    expect(nextVersionCode(1020300, 100, [1020299, 7])).toBe(1020301);
+    expect(nextVersionCode(1020300, 100, [1020305, 1020301])).toBe(1020306);
+    expect(nextVersionCode(1020300, 100, [1020398])).toBe(1020399);
+  });
+
+  it('throws when the range is used up', () => {
+    expect(() => nextVersionCode(1020300, 100, [1020399])).toThrow(
+      'No version code is left in the range 1020300-1020399 of this version',
+    );
+  });
+
+  it('throws when a code of a later version is taken', () => {
+    expect(() => nextVersionCode(1020300, 100, [1020400, 1020301])).toThrow(
+      'Version code 1020400 is in use, which is above the range 1020300-1020399 of this version',
+    );
   });
 });

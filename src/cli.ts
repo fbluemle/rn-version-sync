@@ -3,11 +3,14 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { InvalidArgumentError, program } from 'commander';
-import type { Platform, VersionStatus } from '.';
+import type { Platform, StoreCredentials, VersionStatus } from '.';
 import {
+  PLATFORMS,
   checkVersions,
   formatEnv,
   formatTemplate,
+  getNextVersionCode,
+  getStoreVersionCodes,
   loadConfig,
   readNativeValues,
   syncVersions,
@@ -17,8 +20,9 @@ const packageJson = JSON.parse(
   fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'),
 );
 
-// Read-only flags that print to stdout, keyed by commander's option name.
-// Single-value flags render a fixed template; --print renders --format.
+// Read-only flags that take a platform and print to stdout, keyed by
+// commander's option name. Single-value flags render a fixed template;
+// --print renders --format.
 const printFlags: Record<string, { flag: string; template?: string }> = {
   printVersionName: {
     flag: '--print-version-name',
@@ -31,6 +35,7 @@ const printFlags: Record<string, { flag: string; template?: string }> = {
   printAppId: { flag: '--print-app-id', template: '{appId}' },
   printEnv: { flag: '--print-env' },
   print: { flag: '--print' },
+  printStoreVersionCodes: { flag: '--print-store-version-codes' },
 };
 
 // Output of --print without --format
@@ -44,7 +49,35 @@ function parseInteger(value: string): number {
   return Number(value);
 }
 
-const PLATFORMS: Platform[] = ['android', 'ios'];
+function collectIntegers(value: string, previous: number[] = []): number[] {
+  return [...previous, parseInteger(value)];
+}
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Environment variable ${name} is not set`);
+  }
+  return value;
+}
+
+/**
+ * Credentials of the stores of the given platforms, from the environment.
+ */
+function readStoreCredentials(platforms: Platform[]): StoreCredentials {
+  const credentials: StoreCredentials = {};
+  if (platforms.includes('android')) {
+    credentials.android = requireEnv('PLAY_SERVICE_ACCOUNT_JSON');
+  }
+  if (platforms.includes('ios')) {
+    credentials.ios = {
+      keyId: requireEnv('ASC_KEY_ID'),
+      issuerId: requireEnv('ASC_ISSUER_ID'),
+      privateKey: requireEnv('ASC_PRIVATE_KEY'),
+    };
+  }
+  return credentials;
+}
 
 /**
  * Render package.json (as the js row) and the platforms as an aligned table.
@@ -113,7 +146,12 @@ Project-wide defaults for --reserve-builds, --skip-android, --skip-ios,
 --gradle-path, --pbxproj-path and --configuration can be set in package.json,
 where a command line option takes precedence:
 
-  "rnVersionSync": { "reserveBuilds": 100 }`,
+  "rnVersionSync": { "reserveBuilds": 100 }
+
+--print-store-version-codes and --print-next-version-code read the store
+credentials from the environment: PLAY_SERVICE_ACCOUNT_JSON (content of a
+service account JSON key) for Google Play, and ASC_KEY_ID, ASC_ISSUER_ID and
+ASC_PRIVATE_KEY (content of the .p8 file) for App Store Connect.`,
   )
   .option('--write', 'Update the native files instead of only comparing them')
   .option(
@@ -172,7 +210,36 @@ where a command line option takes precedence:
     '--print-app-id <platform>',
     'Print app identifier (Android applicationId / iOS PRODUCT_BUNDLE_IDENTIFIER) read from the native file for "android" or "ios"',
   )
-  .action((options) => {
+  .option(
+    '--print-store-version-codes <platform>',
+    'Print the version codes in use in the store, one per line: Google Play for "android", App Store Connect for "ios"',
+  )
+  .option(
+    '--print-next-version-code',
+    'Print the next version code of the current version that is free in the stores (requires --reserve-builds)',
+  )
+  .option(
+    '--taken <codes...>',
+    'Version codes in use that the stores do not know about, for --print-next-version-code',
+    collectIntegers,
+  )
+  .option(
+    '--app-id <id>',
+    'App id to query in the stores (default: read from the native files)',
+  )
+  .option(
+    '--android-app-id <id>',
+    'Google Play package name to query, where it is not --app-id',
+  )
+  .option(
+    '--ios-app-id <id>',
+    'App Store bundle id to query, where it is not --app-id',
+  )
+  .option(
+    '--verbose',
+    'Print the store requests and their raw responses to stderr',
+  )
+  .action(async (options) => {
     try {
       const projectDir = options.projectDir
         ? path.resolve(options.projectDir)
@@ -198,6 +265,9 @@ where a command line option takes precedence:
       );
 
       const modes = activePrints.map((key) => printFlags[key].flag);
+      if (options.printNextVersionCode) {
+        modes.push('--print-next-version-code');
+      }
       if (options.write) {
         modes.push('--write');
       }
@@ -211,6 +281,48 @@ where a command line option takes precedence:
         throw new Error('--format can only be used with --print');
       }
 
+      const { appId, androidAppId, iosAppId } = options;
+      const storeOptions = {
+        ...syncOptions,
+        appId,
+        androidAppId,
+        iosAppId,
+        log: options.verbose ? console.error : undefined,
+      };
+      const queriesStores =
+        options.printStoreVersionCodes !== undefined ||
+        options.printNextVersionCode;
+      if (!queriesStores && (appId ?? androidAppId ?? iosAppId) !== undefined) {
+        throw new Error(
+          '--app-id, --android-app-id and --ios-app-id can only be used with --print-store-version-codes or --print-next-version-code',
+        );
+      }
+      if (options.taken !== undefined && !options.printNextVersionCode) {
+        throw new Error(
+          '--taken can only be used with --print-next-version-code',
+        );
+      }
+
+      if (options.printNextVersionCode) {
+        if (options.versionCode !== undefined) {
+          throw new Error(
+            '--version-code cannot be used with --print-next-version-code',
+          );
+        }
+        const config = loadConfig(projectDir);
+        const skipped = {
+          android: options.skipAndroid ?? config.skipAndroid,
+          ios: options.skipIos ?? config.skipIos,
+        };
+        const next = await getNextVersionCode(
+          projectDir,
+          readStoreCredentials(PLATFORMS.filter((p) => !skipped[p])),
+          { ...storeOptions, taken: options.taken },
+        );
+        process.stdout.write(`${next}\n`);
+        return;
+      }
+
       if (activePrints.length === 1) {
         const [key] = activePrints;
         const platform: string = options[key];
@@ -219,6 +331,17 @@ where a command line option takes precedence:
         }
         if (options.configuration !== undefined && platform !== 'ios') {
           throw new Error('--configuration does not apply to android');
+        }
+
+        if (key === 'printStoreVersionCodes') {
+          const codes = await getStoreVersionCodes(
+            projectDir,
+            platform,
+            readStoreCredentials([platform]),
+            storeOptions,
+          );
+          process.stdout.write(codes.map((code) => `${code}\n`).join(''));
+          return;
         }
 
         if (key === 'printEnv') {
@@ -267,4 +390,4 @@ where a command line option takes precedence:
     }
   });
 
-program.parse();
+program.parseAsync();

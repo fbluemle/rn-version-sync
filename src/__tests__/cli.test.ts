@@ -2,25 +2,61 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { TestProject, buildGradle, buildPbxproj } from './helpers';
+import {
+  APP_STORE_API,
+  PLAY_API,
+  type Routes,
+  TestProject,
+  appStoreRoutes,
+  buildGradle,
+  buildPbxproj,
+  createStoreKeys,
+  playRoutes,
+} from './helpers';
 
 const root = path.resolve(__dirname, '..', '..');
 const CLI = path.join(root, 'dist', 'cli.js');
+const STUB_FETCH = path.join(__dirname, 'stub-fetch.cjs');
 const packageVersion: string = JSON.parse(
   fs.readFileSync(path.join(root, 'package.json'), 'utf8'),
 ).version;
 
-/** Run the built CLI in cwd and capture exit status, stdout and stderr */
-function run(cwd: string, ...args: string[]) {
-  const result = spawnSync(process.execPath, [CLI, ...args], {
+const STORE_ENV = [
+  'PLAY_SERVICE_ACCOUNT_JSON',
+  'ASC_KEY_ID',
+  'ASC_ISSUER_ID',
+  'ASC_PRIVATE_KEY',
+];
+
+/**
+ * Run the built CLI in cwd and capture exit status, stdout and stderr. The
+ * store credentials come from env alone, and with routes, fetch answers
+ * from them instead of the network.
+ */
+function runWith(
+  { env = {}, routes }: { env?: Record<string, string>; routes?: Routes },
+  cwd: string,
+  ...args: string[]
+) {
+  const childEnv: NodeJS.ProcessEnv = { ...process.env };
+  for (const name of STORE_ENV) {
+    delete childEnv[name];
+  }
+  const stub = routes ? ['--require', STUB_FETCH] : [];
+  const result = spawnSync(process.execPath, [...stub, CLI, ...args], {
     cwd,
     encoding: 'utf8',
+    env: { ...childEnv, ...env, STUB_FETCH: JSON.stringify(routes) },
   });
   return {
     status: result.status,
     stdout: result.stdout,
     stderr: result.stderr,
   };
+}
+
+function run(cwd: string, ...args: string[]) {
+  return runWith({}, cwd, ...args);
 }
 
 describe('cli', () => {
@@ -468,6 +504,118 @@ describe('cli', () => {
     });
   });
 
+  describe('stores', () => {
+    const keys = createStoreKeys();
+    const env = {
+      PLAY_SERVICE_ACCOUNT_JSON: keys.serviceAccountJson,
+      ASC_KEY_ID: keys.appStoreKey.keyId,
+      ASC_ISSUER_ID: keys.appStoreKey.issuerId,
+      ASC_PRIVATE_KEY: keys.appStoreKey.privateKey,
+    };
+    const config = { reserveBuilds: 100 };
+
+    it('prints the version codes in Google Play', () => {
+      project = new TestProject();
+      const routes = playRoutes('com.testapp', [1020302, 1020301]);
+
+      expect(
+        runWith(
+          { env, routes },
+          project.root,
+          '--print-store-version-codes',
+          'android',
+        ),
+      ).toEqual({ status: 0, stdout: '1020301\n1020302\n', stderr: '' });
+    });
+
+    it('prints the next version code', () => {
+      project = new TestProject({ version: '1.2.3', config });
+      const routes = {
+        ...playRoutes('com.example.staging', [1020301]),
+        ...appStoreRoutes('com.example.ios', ['1020302']),
+      };
+
+      expect(
+        runWith(
+          { env, routes },
+          project.root,
+          '--print-next-version-code',
+          '--taken',
+          '1020304',
+          '1020303',
+          '--app-id',
+          'com.example.staging',
+          '--ios-app-id',
+          'com.example.ios',
+        ),
+      ).toEqual({ status: 0, stdout: '1020305\n', stderr: '' });
+    });
+
+    it('prints the raw responses to stderr with --verbose', () => {
+      project = new TestProject({ version: '1.2.3', config });
+      const routes = {
+        ...playRoutes('com.testapp', [1020301]),
+        ...appStoreRoutes('com.testapp', ['1020302']),
+      };
+
+      const { status, stdout, stderr } = runWith(
+        { env, routes },
+        project.root,
+        '--print-next-version-code',
+        '--verbose',
+      );
+      expect({ status, stdout }).toEqual({ status: 0, stdout: '1020303\n' });
+      expect(stderr).toContain(
+        `GET ${PLAY_API}/applications/com.testapp/edits/edit1/bundles: 200\n{"bundles":[{"versionCode":1020301}]}\n`,
+      );
+      expect(stderr).toContain(
+        `GET ${APP_STORE_API}/v1/builds: 200\n{"data":[{"attributes":{"version":"1020302"}}]}\n`,
+      );
+      expect(stderr).not.toContain('play-token');
+    });
+
+    it('needs only the credentials of platforms that are not skipped', () => {
+      project = new TestProject({
+        version: '1.2.3',
+        config: { ...config, skipIos: true },
+      });
+      const routes = playRoutes('com.testapp', [1020301]);
+      const { PLAY_SERVICE_ACCOUNT_JSON } = env;
+
+      expect(
+        runWith(
+          { env: { PLAY_SERVICE_ACCOUNT_JSON }, routes },
+          project.root,
+          '--print-next-version-code',
+        ),
+      ).toEqual({ status: 0, stdout: '1020302\n', stderr: '' });
+    });
+
+    it('fails when a credential is not in the environment', () => {
+      project = new TestProject({ version: '1.2.3', config });
+
+      expect(
+        run(project.root, '--print-store-version-codes', 'android'),
+      ).toEqual({
+        status: 1,
+        stdout: '',
+        stderr:
+          'Error: Environment variable PLAY_SERVICE_ACCOUNT_JSON is not set\n',
+      });
+      expect(
+        runWith(
+          { env: { ...env, ASC_PRIVATE_KEY: '' } },
+          project.root,
+          '--print-next-version-code',
+        ),
+      ).toEqual({
+        status: 1,
+        stdout: '',
+        stderr: 'Error: Environment variable ASC_PRIVATE_KEY is not set\n',
+      });
+    });
+  });
+
   describe('option validation', () => {
     beforeEach(() => {
       project = new TestProject({ version: '1.2.3' });
@@ -527,6 +675,31 @@ describe('cli', () => {
       expectError(
         ['--print-version-name', 'android', '--print-app-id', 'android'],
         'Error: Only one of --print-version-name, --print-app-id may be used at a time\n',
+      );
+    });
+
+    it('rejects the store options outside the store flags', () => {
+      expectError(
+        ['--app-id', 'com.example'],
+        'Error: --app-id, --android-app-id and --ios-app-id can only be used with --print-store-version-codes or --print-next-version-code\n',
+      );
+      expectError(
+        ['--print-store-version-codes', 'ios', '--taken', '5'],
+        'Error: --taken can only be used with --print-next-version-code\n',
+      );
+    });
+
+    it('rejects --version-code with --print-next-version-code', () => {
+      expectError(
+        ['--print-next-version-code', '--version-code', '5'],
+        'Error: --version-code cannot be used with --print-next-version-code\n',
+      );
+    });
+
+    it('rejects --print-next-version-code combined with another mode', () => {
+      expectError(
+        ['--print-next-version-code', '--write'],
+        'Error: Only one of --print-next-version-code, --write may be used at a time\n',
       );
     });
 
