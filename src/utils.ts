@@ -11,8 +11,9 @@ export interface PackageJson {
   name?: string;
   version?: string;
   /** Project configuration, validated by loadConfig */
+  rnVersioning?: unknown;
+  /** Deprecated keys of the project configuration */
   rnVersionSync?: unknown;
-  /** Deprecated key of the project configuration */
   'rn-version-sync'?: unknown;
 }
 

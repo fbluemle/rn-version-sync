@@ -2,16 +2,16 @@ import * as path from 'node:path';
 import { readPackageJson } from './utils';
 
 /** Key of package.json that holds the project configuration */
-const CONFIG_KEY = 'rnVersionSync';
+const CONFIG_KEY = 'rnVersioning';
 
-/** Deprecated key, still read with a warning until 1.0.0 */
-const LEGACY_CONFIG_KEY = 'rn-version-sync';
+/** Keys read, newest first; the deprecated ones warn and go away in 1.0.0 */
+const CONFIG_KEYS = [CONFIG_KEY, 'rnVersionSync', 'rn-version-sync'] as const;
 
-/** Project directories already warned about the deprecated key */
+/** Project directories already warned about a deprecated key */
 const warnedLegacyKey = new Set<string>();
 
 /**
- * Project-wide defaults, stored under the "rnVersionSync" key of
+ * Project-wide defaults, stored under the "rnVersioning" key of
  * package.json. Each setting has a CLI option of the same name, and an
  * explicit option takes precedence over the configured value.
  */
@@ -69,27 +69,27 @@ function invalid(key: string, problem: string): Error {
 }
 
 /**
- * Find the configuration in package.json, falling back to the deprecated key
+ * Find the configuration in package.json, falling back to a deprecated key
  * with a warning printed once per project directory.
  */
 function readRawConfig(projectRoot: string): { key: string; raw: unknown } {
   const packageJson = readPackageJson(projectRoot);
-  if (packageJson[LEGACY_CONFIG_KEY] === undefined) {
-    return { key: CONFIG_KEY, raw: packageJson[CONFIG_KEY] };
-  }
-  if (packageJson[CONFIG_KEY] !== undefined) {
+  const [key = CONFIG_KEY, older] = CONFIG_KEYS.filter(
+    (candidate) => packageJson[candidate] !== undefined,
+  );
+  if (older !== undefined) {
     throw new Error(
-      `package.json has both "${CONFIG_KEY}" and "${LEGACY_CONFIG_KEY}" keys; remove "${LEGACY_CONFIG_KEY}"`,
+      `package.json has both "${key}" and "${older}" keys; remove "${older}"`,
     );
   }
   const resolvedRoot = path.resolve(projectRoot);
-  if (!warnedLegacyKey.has(resolvedRoot)) {
+  if (key !== CONFIG_KEY && !warnedLegacyKey.has(resolvedRoot)) {
     warnedLegacyKey.add(resolvedRoot);
     console.warn(
-      `Warning: the "${LEGACY_CONFIG_KEY}" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "${CONFIG_KEY}"`,
+      `Warning: the "${key}" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "${CONFIG_KEY}"`,
     );
   }
-  return { key: LEGACY_CONFIG_KEY, raw: packageJson[LEGACY_CONFIG_KEY] };
+  return { key, raw: packageJson[key] };
 }
 
 /**

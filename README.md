@@ -1,7 +1,9 @@
-# rn-version-sync
+# rn-versioning
 
-Fast and simple utility to sync React Native version with native code (Android
-and iOS).
+Fast and simple utility to sync the React Native version with native code
+(Android and iOS) and find the next version code in the stores.
+
+Published as `rn-version-sync` up to 0.10.0.
 
 [![ci][1]][2]
 
@@ -41,7 +43,7 @@ Without arguments, the command compares the native files with the version in
 makes it usable as a CI check:
 
 ```
-$ npx rn-version-sync
+$ npx rn-versioning
 PLATFORM  APP ID           VERSION        STATUS
 js        example-app      1.2.3
 android   com.example.app  1.2.3 (10203)  ok
@@ -56,7 +58,7 @@ values, the `js` row's status names the target, for example
 `overridden 2.0.0 (20000)`. Add `--write` to update the native files:
 
 ```
-$ npx rn-version-sync --write
+$ npx rn-versioning --write
 PLATFORM  APP ID           VERSION        STATUS
 js        example-app      1.2.3
 android   com.example.app  1.2.3 (10203)  unchanged
@@ -67,15 +69,15 @@ To keep the native files in step with `npm version`, install it as a dev
 dependency and hook it into the `version` lifecycle:
 
 ```bash
-npm install --save-dev rn-version-sync
+npm install --save-dev rn-versioning
 # or
-yarn add -D rn-version-sync
+yarn add -D rn-versioning
 ```
 
 ```json
 {
   "scripts": {
-    "version": "rn-version-sync --write && git add -u"
+    "version": "rn-versioning --write && git add -u"
   }
 }
 ```
@@ -112,13 +114,13 @@ is ignored with `--version-code`, and best set once as `reserveBuilds` in
 
 ### Configuration
 
-Settings that are permanent for a project go under the `rnVersionSync` key
+Settings that are permanent for a project go under the `rnVersioning` key
 of `package.json`, so the check, `--write` and the `version` script all use
 the same values without repeating them on every call:
 
 ```json
 {
-  "rnVersionSync": {
+  "rnVersioning": {
     "reserveBuilds": 100
   }
 }
@@ -136,8 +138,9 @@ A command line option takes precedence over the configured value. Relative
 paths are resolved against the project directory, and an unknown setting or a
 value of the wrong type is an error.
 
-The `rn-version-sync` key used by 0.8.0 is still read, with a warning, until
-1.0.0. Rename it to `rnVersionSync` to keep the configuration working.
+The `rnVersionSync` key used up to 0.10.0 and the `rn-version-sync` key used
+by 0.8.0 are still read, with a warning, until 1.0.0. Rename either to
+`rnVersioning` to keep the configuration working.
 
 ## Reading values from native files
 
@@ -149,28 +152,28 @@ like. `--gradle-path` and `--pbxproj-path` apply here as well.
 ### Single values
 
 ```bash
-npx rn-version-sync --print-version-name android
+npx rn-versioning --print-version-name android
 # 1.2.3
 
-npx rn-version-sync --print-version-code ios
+npx rn-versioning --print-version-code ios
 # 10203
 
-npx rn-version-sync --print-app-id ios
+npx rn-versioning --print-app-id ios
 # com.example.app
 
-npx rn-version-sync --print-app-id ios --configuration Staging
+npx rn-versioning --print-app-id ios --configuration Staging
 # com.example.app.staging
 ```
 
 ### All values, or a custom format
 
 ```bash
-npx rn-version-sync --print ios
+npx rn-versioning --print ios
 # appId: com.example.app
 # versionName: 1.2.3
 # versionCode: 10203
 
-npx rn-version-sync --print ios --format '{appId}@{versionName}+{versionCode}'
+npx rn-versioning --print ios --format '{appId}@{versionName}+{versionCode}'
 # com.example.app@1.2.3+10203
 ```
 
@@ -181,14 +184,14 @@ projects where the app id cannot be resolved. Values are inserted as written
 in the native file. For example, a Sentry release id is one call:
 
 ```bash
-RELEASE=$(npx rn-version-sync --print ios --format '{appId}@{versionName}+{versionCode}')
+RELEASE=$(npx rn-versioning --print ios --format '{appId}@{versionName}+{versionCode}')
 sentry-cli releases new "$RELEASE"
 ```
 
 ### Environment variables
 
 ```bash
-npx rn-version-sync --print-env ios
+npx rn-versioning --print-env ios
 # APP_ID=com.example.app
 # VERSION_NAME=1.2.3
 # VERSION_CODE=10203
@@ -200,7 +203,7 @@ which keeps the output safe to `eval` or append to `GITHUB_ENV` without
 quoting:
 
 ```bash
-vars=$(npx rn-version-sync --print-env ios) && eval "$vars"
+vars=$(npx rn-versioning --print-env ios) && eval "$vars"
 sentry-cli releases new "$APP_ID@$VERSION_NAME+$VERSION_CODE"
 sentry-cli releases files "$APP_ID@$VERSION_NAME+$VERSION_CODE" \
   upload-sourcemaps --dist "$VERSION_CODE" build/
@@ -212,7 +215,7 @@ Actions the output can go straight into the environment of the following
 steps:
 
 ```yaml
-- run: npx rn-version-sync --print-env ios >> "$GITHUB_ENV"
+- run: npx rn-versioning --print-env ios >> "$GITHUB_ENV"
 - run: sentry-cli releases new "$APP_ID@$VERSION_NAME+$VERSION_CODE"
 ```
 
@@ -242,11 +245,11 @@ therefore the source of truth for which codes are taken. Two flags query
 them, Google Play for `android` and App Store Connect for `ios`:
 
 ```bash
-npx rn-version-sync --print-store-version-codes android
+npx rn-versioning --print-store-version-codes android
 # 1020301
 # 1020302
 
-npx rn-version-sync --print-next-version-code
+npx rn-versioning --print-next-version-code
 # 1020303
 ```
 
@@ -286,7 +289,7 @@ allow listing builds. With key files at hand, pass their content:
 
 ```bash
 PLAY_SERVICE_ACCOUNT_JSON=$(cat play.json) \
-  npx rn-version-sync --print-store-version-codes android
+  npx rn-versioning --print-store-version-codes android
 ```
 
 ### Which codes are found
@@ -332,10 +335,10 @@ code, created with a push that fails if the ref exists:
 
 ```bash
 taken=$(git ls-remote origin 'refs/builds/*' | sed 's|.*/||')
-code=$(npx rn-version-sync --print-next-version-code \
+code=$(npx rn-versioning --print-next-version-code \
   ${taken:+--taken $taken})
 git push --force-with-lease="refs/builds/$code:" origin "HEAD:refs/builds/$code"
-npx rn-version-sync --write --version-code "$code"
+npx rn-versioning --write --version-code "$code"
 ```
 
 ## Programmatic use
@@ -350,7 +353,7 @@ const {
   loadConfig,
   getStoreVersionCodes,
   getNextVersionCode,
-} = require('rn-version-sync');
+} = require('rn-versioning');
 
 checkVersions(process.cwd());
 // {
@@ -392,7 +395,7 @@ await getNextVersionCode(process.cwd(), credentials, { taken: [1020303] });
 
 `resolveVersions`, `formatTemplate` and `formatEnv` back the target row,
 `--format` and `--print-env` in the same way. Like the CLI, all functions fill
-in options that are not passed explicitly from the `rnVersionSync`
+in options that are not passed explicitly from the `rnVersioning`
 configuration in `package.json`. The two store functions are asynchronous and
 take their credentials as an argument instead of reading the environment;
 a `log` function in their options receives what `--verbose` prints.
@@ -414,7 +417,7 @@ without a project directory, and `nextVersionCode` is the calculation alone.
 
 MIT
 
-[1]: https://github.com/fbluemle/rn-version-sync/workflows/ci/badge.svg
-[2]: https://github.com/fbluemle/rn-version-sync/actions
+[1]: https://github.com/fbluemle/rn-versioning/workflows/ci/badge.svg
+[2]: https://github.com/fbluemle/rn-versioning/actions
 [3]: https://www.npmjs.com/package/react-native-version
 [4]: https://www.npmjs.com/package/rn-version

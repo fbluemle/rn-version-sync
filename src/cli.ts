@@ -134,7 +134,7 @@ function renderStatus(
 }
 
 program
-  .name('rn-version-sync')
+  .name('rn-versioning')
   .description(
     'Compare the package.json version with the native projects, or sync them with --write',
   )
@@ -146,7 +146,7 @@ Project-wide defaults for --reserve-builds, --skip-android, --skip-ios,
 --gradle-path, --pbxproj-path and --configuration can be set in package.json,
 where a command line option takes precedence:
 
-  "rnVersionSync": { "reserveBuilds": 100 }
+  "rnVersioning": { "reserveBuilds": 100 }
 
 --print-store-version-codes and --print-next-version-code read the store
 credentials from the environment: PLAY_SERVICE_ACCOUNT_JSON (content of a
