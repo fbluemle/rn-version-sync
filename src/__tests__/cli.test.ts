@@ -269,7 +269,9 @@ describe('cli', () => {
     it('reads the deprecated key with a single warning', () => {
       project = new TestProject({
         version: '1.2.3',
-        legacyConfig: { configuration: 'Debug', skipAndroid: true },
+        packageJson: {
+          rnVersionSync: { configuration: 'Debug', skipAndroid: true },
+        },
       });
 
       const result = run(project.root);
@@ -277,7 +279,7 @@ describe('cli', () => {
       expect(result.stdout).toContain('ios (Debug)');
       expect(result.stderr).toBe(
         [
-          'Warning: the "rn-version-sync" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "rnVersionSync"',
+          'Warning: the "rnVersionSync" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "rnVersioning"',
           'Run with --write to update the native files.',
           '',
         ].join('\n'),
@@ -294,7 +296,7 @@ describe('cli', () => {
         status: 1,
         stdout: '',
         stderr:
-          'Error: Invalid "rnVersionSync" configuration in package.json: unknown setting "reserveBuild" (available: reserveBuilds, gradlePath, pbxprojPath, configuration, skipAndroid, skipIos)\n',
+          'Error: Invalid "rnVersioning" configuration in package.json: unknown setting "reserveBuild" (available: reserveBuilds, gradlePath, pbxprojPath, configuration, skipAndroid, skipIos)\n',
       });
     });
 
@@ -723,11 +725,11 @@ describe('cli', () => {
     it('prints usage with --help', () => {
       const result = run(root, '--help');
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain('Usage: rn-version-sync [options]');
+      expect(result.stdout).toContain('Usage: rn-versioning [options]');
       expect(result.stdout).toContain('--write');
       expect(result.stdout).toContain('--reserve-builds <n>');
       expect(result.stdout).toContain(
-        '"rnVersionSync": { "reserveBuilds": 100 }',
+        '"rnVersioning": { "reserveBuilds": 100 }',
       );
     });
   });

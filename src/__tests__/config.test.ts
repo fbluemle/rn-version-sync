@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../config';
 import { TestProject } from './helpers';
 
-const INVALID = 'Invalid "rnVersionSync" configuration in package.json: ';
+const INVALID = 'Invalid "rnVersioning" configuration in package.json: ';
 
 describe('loadConfig', () => {
   let project: TestProject;
@@ -94,20 +94,24 @@ describe('loadConfig', () => {
     }
   });
 
-  it('reads the deprecated key and warns once per project directory', () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    project = new TestProject({
-      android: false,
-      ios: false,
-      legacyConfig: { reserveBuilds: 100 },
-    });
+  it('reads a deprecated key and warns once per project directory', () => {
+    for (const key of ['rnVersionSync', 'rn-version-sync']) {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      project = new TestProject({
+        android: false,
+        ios: false,
+        packageJson: { [key]: { reserveBuilds: 100 } },
+      });
 
-    expect(loadConfig(project.root)).toEqual({ reserveBuilds: 100 });
-    expect(loadConfig(project.root)).toEqual({ reserveBuilds: 100 });
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn).toHaveBeenCalledWith(
-      'Warning: the "rn-version-sync" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "rnVersionSync"',
-    );
+      expect(loadConfig(project.root)).toEqual({ reserveBuilds: 100 });
+      expect(loadConfig(project.root)).toEqual({ reserveBuilds: 100 });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledWith(
+        `Warning: the "${key}" key in package.json is deprecated and will no longer be read in 1.0.0; rename it to "rnVersioning"`,
+      );
+      warn.mockRestore();
+      project.cleanup();
+    }
   });
 
   it('names the deprecated key in validation errors', () => {
@@ -115,24 +119,24 @@ describe('loadConfig', () => {
     project = new TestProject({
       android: false,
       ios: false,
-      legacyConfig: { reserveBuilds: 0 },
+      packageJson: { rnVersionSync: { reserveBuilds: 0 } },
     });
 
     expect(() => loadConfig(project.root)).toThrow(
-      'Invalid "rn-version-sync" configuration in package.json: reserveBuilds must be a positive integer',
+      'Invalid "rnVersionSync" configuration in package.json: reserveBuilds must be a positive integer',
     );
   });
 
-  it('rejects both keys at once', () => {
+  it('rejects two keys at once, naming the older one for removal', () => {
     project = new TestProject({
       android: false,
       ios: false,
       config: { reserveBuilds: 100 },
-      legacyConfig: { reserveBuilds: 10 },
+      packageJson: { rnVersionSync: { reserveBuilds: 10 } },
     });
 
     expect(() => loadConfig(project.root)).toThrow(
-      'package.json has both "rnVersionSync" and "rn-version-sync" keys; remove "rn-version-sync"',
+      'package.json has both "rnVersioning" and "rnVersionSync" keys; remove "rnVersionSync"',
     );
   });
 });

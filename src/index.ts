@@ -33,7 +33,7 @@ export type ReadOptions = Pick<
 
 /**
  * Project configuration plus the per-invocation overrides. Options left
- * undefined are filled in from the "rn-version-sync" key of package.json.
+ * undefined are filled in from the "rnVersioning" key of package.json.
  */
 export interface SyncOptions extends ProjectConfig {
   versionName?: string;

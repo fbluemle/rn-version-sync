@@ -39,10 +39,10 @@ export interface ProjectOptions {
   iosTargets?: PbxprojTarget[];
   /** Project-level build configurations; default to the targets' names without version settings */
   iosProjectConfigs?: PbxprojBuildConfig[];
-  /** Written as the "rnVersionSync" key of package.json, even when invalid */
+  /** Written as the "rnVersioning" key of package.json, even when invalid */
   config?: unknown;
-  /** Written as the deprecated "rn-version-sync" key of package.json */
-  legacyConfig?: unknown;
+  /** Further keys of package.json, such as a deprecated configuration key */
+  packageJson?: Record<string, unknown>;
 }
 
 export const APPLICATION_PRODUCT_TYPE = 'com.apple.product-type.application';
@@ -71,7 +71,7 @@ export class TestProject {
   readonly root: string;
 
   constructor(options: ProjectOptions = {}) {
-    this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-version-sync-'));
+    this.root = fs.mkdtempSync(path.join(os.tmpdir(), 'rn-versioning-'));
 
     fs.writeFileSync(
       path.join(this.root, 'package.json'),
@@ -80,11 +80,9 @@ export class TestProject {
           name: 'test-app',
           version: options.version ?? defaults.version,
           ...(options.config !== undefined && {
-            rnVersionSync: options.config,
+            rnVersioning: options.config,
           }),
-          ...(options.legacyConfig !== undefined && {
-            'rn-version-sync': options.legacyConfig,
-          }),
+          ...options.packageJson,
         },
         null,
         2,
